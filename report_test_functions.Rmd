@@ -36,6 +36,7 @@ filtered_data <- data[[2]]
 print(data)
 ```
 
+
 ```{r}
 st <- summary_table(updated_data, filtered_data)
 print(st)
@@ -45,4 +46,10 @@ ht <- clustered_heatmap(filtered_data)
 print(ht)
 #pca <- PCA_plot(updated_data, 1, 3)
 #print(pca)
+```
+Differential Expression
+```{r}
+df <- diff_eq(updated_data)
+print(df)
+
 ```
