@@ -22,8 +22,8 @@ head(data)
 ```
 Sample Info Exploration
 ```{r}
-cs <- column_summary(data)
-print(cs)
+#cs <- column_summary(data)
+#print(cs)
 p <- plot_continous_var(data, "ex")
 print(p)
 ```

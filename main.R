@@ -32,18 +32,40 @@ column_summary <- function(data){
   data_num_updated <- merge(data_num_mean, data_num_stdev, on = 'Column Name')
  
   #format like example
-  data_num_updated['Mean (sd) or Distinct Values'] <- paste(round(data_num_updated$Mean,2), ' +/-(', round(data_num_updated$sd,2), ')')
+  data_num_updated['Mean (sd) or Distinct Values'] <- paste0(round(data_num_updated$Mean,2), ' +/- (', round(data_num_updated$sd,2), ')')
   data_num_updated <- data_num_updated[c('Column Name', 'Mean (sd) or Distinct Values')]
 
-  # Concatenate unique instances of the Value column into one cell
-  data_cat_gene <- paste(unique(data$Gene), collapse = ", ")
-  data_cat_geneID <- paste(unique(data$GeneID), collapse = ", ")
-  data_cat_coord <- paste(unique(data$Coordinates), collapse = ", ")
+  # Replicate
+  data_num_updated['Replicate'] <- str_sub(data_num_updated$'Column Name', -1) 
   
+  # Timepoint
+  data_num_updated <- data_num_updated %>% mutate("Timepoint" = case_when(
+                                          str_starts(`Column Name`, "ex") ~  str_sub(data_num_updated$`Column Name`, 3,-3),
+                                          (str_sub(`Column Name`, 2, 2) == "P") ~ str_sub(data_num_updated$`Column Name`, 2,3),
+                                          (str_sub(`Column Name`, 2, 2) == "D") ~ str_sub(data_num_updated$`Column Name`, 2,4),
+                                          (str_sub(`Column Name`, 2, 3) == "Ad") ~ "Ad",
+                                          TRUE ~ NA_character_
+                                        ))
+  #Cell Type
+  data_num_updated <- data_num_updated %>% mutate("Cell Type" = case_when(
+                                          str_starts(`Column Name`, "e") ~ "Explanted, dissociated adult cardiomyocytes",
+                                          str_starts(`Column Name`, "v") ~ "In vivo ventricular myocardium",
+                                          str_starts(`Column Name`, "i") ~ "In vitro isolated Cardiomyocytes",
+                                          TRUE ~ NA_character_
+                                          ))
+  
+  # # Concatenate unique instances of the Value column into one cell
+  data_cat_gene <- paste0(data$Gene[1], ", etc...")
+  data_cat_geneID <- paste0(data$GeneID[1], ", etc...")
+  data_cat_coord <- paste0(data$Coordinates[1], ", etc...")
+
   # Create a new dataframe with the result
   data_cat_updated <- data.frame(Gene = data_cat_gene, GeneID = data_cat_geneID, Coordinates = data_cat_coord)
   data_cat_updated <- pivot_longer(data_cat_updated, cols = everything())
   colnames(data_cat_updated) <- c('Column Name', 'Mean (sd) or Distinct Values')
+  data_cat_updated['Replicate'] <- "N/A"
+  data_cat_updated['Timepoint'] <- "N/A"
+  data_cat_updated['Cell Type'] <- "N/A"
   
   # Row bind character and numeric values
   updated <- rbind(data_cat_updated, data_num_updated)
@@ -52,26 +74,32 @@ column_summary <- function(data){
   col_type <- data.frame(sapply(data, type))
   col_type <- rownames_to_column(col_type)
   colnames(col_type) <- c('Column Name','Type')
-  
+   
   updated <- merge(updated, col_type, on = 'Column Name')
+  updated <- updated %>% select('Column Name', 'Mean (sd) or Distinct Values', 'Type', everything()) %>% dplyr::arrange('Timepoint')
+  
   
   return(updated)
 }
 
+
 plot_continous_var <- function(data, column_name){
   
+  #subset data
+  data <- data %>% select(starts_with(column_name)) 
+  
   # format data
-  plot_df  <- pivot_longer(data, cols = starts_with(column_name)) #keep columns that start with
-  plot_df$name <- factor(plot_df$name) #make name column into factors to plot
+  plot_df  <- pivot_longer(data, cols = everything()) #keep columns that start with
+  # plot_df$name <- factor(plot_df$name) #make name column into factors to plot
+  # 
+  # # violin plot
+  # v_plt <- ggplot(plot_df, aes(x = -log10(value), color = name, fill = name)) + 
+  #           geom_density(adjust=3, alpha=.4) +
+  #           theme_ipsum() +
+  #           facet_wrap(~name) +
+  #           theme(legend.position="bottom")
   
-  # violin plot
-  v_plt <- ggplot(plot_df, aes(x = -log10(value), color = name, fill = name)) + 
-            geom_density(adjust=3, alpha=.4) +
-            theme_ipsum() +
-            facet_wrap(~name) +
-            theme(legend.position="bottom")
-  
-  return(v_plt)
+  return(plot_df)
 }
 
 
