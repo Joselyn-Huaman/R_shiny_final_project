@@ -9,7 +9,7 @@ library('hrbrthemes') #theme_ipsum
 library(ggplot2)
 library(RColorBrewer)
 library(pheatmap)
-
+library(patchwork)
 #'Load Data
 load_data <- function(file){
   df_txt <- read_delim(file, delim = "\t")
@@ -152,19 +152,19 @@ diagnostic_scatter_plots <- function(data, filtered_data){
   
   #' median count vs variance (consider log scale for plot)
   median_v_var <- ggplot() + 
-          geom_point(data = data, aes(x=Median_Count, y=-log10(Variance), color = "Fail_Filter"), alpha = 0.5) +
-          geom_point(data = filtered_data, aes(x=Median_Count, y=-log10(Variance), color = "Pass_Filter"), alpha = 0.8) +
-          scale_color_manual(values = c("Fail_Filter" = "lightblue", "Pass_Filter" = "darkblue"))
-          ggtitle('Median count vs variance')
-  
+          geom_point(data = data, aes(x=-log10(Median_Count), y=-log10(Variance), color = "Fail_Filter"), alpha = 0.5, clip = FALSE) +
+          geom_point(data = filtered_data, aes(x=-log10(Median_Count), y=-log10(Variance), color = "Pass_Filter"), alpha = 0.5, clip = FALSE) +
+          scale_color_manual(values = c("Fail_Filter" = "lightblue", "Pass_Filter" = "darkblue")) +
+          ggtitle('Median count vs variance') +
+          coord_cartesian(clip = 'off')
    #' median count vs number of zeros
   median_v_zero <- ggplot() + 
-            geom_point(data = data, aes(x=Median_Count, y=Number_of_Zeros, color = "Fail_Filter"), alpha = 0.5) +
-            geom_point(data = filtered_data, aes(x=Median_Count, y=Number_of_Zeros, color = "Pass_Filter"), alpha = 0.8) +
-            scale_color_manual(values = c("Fail_Filter" = "lightblue", "Pass_Filter" = "darkblue"))
-          ggtitle('Median count vs number of zeros')
-  
-  return(list(median_v_var, median_v_zero))
+            geom_point(data = data, aes(x=-log10(Median_Count), y=Number_of_Zeros, color = "Fail_Filter"), alpha = 0.5) +
+            geom_point(data = filtered_data, aes(x=-log10(Median_Count), y=Number_of_Zeros, color = "Pass_Filter"), alpha = 0.5) +
+            scale_color_manual(values = c("Fail_Filter" = "lightblue", "Pass_Filter" = "darkblue")) +
+            ggtitle('Median count vs number of zeros') +
+            xlim(0,500)
+  return(median_v_var | median_v_zero)
 }
 
 clustered_heatmap <- function(filtered_data) {

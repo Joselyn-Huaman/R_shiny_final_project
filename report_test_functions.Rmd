@@ -30,7 +30,7 @@ print(p)
 
 Counts Matrix Exploration
 ```{r}
-data <- counts_matrix_exploration(data, .5, 4)
+data <- counts_matrix_exploration(data, .75, 3)
 updated_data <- data[[1]]
 filtered_data <- data[[2]] 
 print(data)
@@ -40,8 +40,8 @@ print(data)
 ```{r}
 st <- summary_table(updated_data, filtered_data)
 print(st)
-dsp <- diagnostic_scatter_plots(updated_data, filtered_data)
-print(dsp)
+#dsp <- diagnostic_scatter_plots(updated_data, filtered_data)
+#print(dsp)
 ht <- clustered_heatmap(filtered_data)
 print(ht)
 #pca <- PCA_plot(updated_data, 1, 3)
