@@ -3,7 +3,7 @@ library('SummarizedExperiment')
 library('DESeq2')
 #library('biomaRt')
 #library('testthat')
-#library('fgsea')
+library('fgsea')
 library(dplyr)
 library('hrbrthemes') #theme_ipsum
 library(ggplot2)
@@ -18,7 +18,6 @@ load_data <- function(file){
 }
 
 #' Sample Info exploration
-
 column_summary <- function(data){
   #find mean over column
   data_num_mean <- data %>% select_if(is.numeric) %>% summarise_each(funs(mean(., na.rm=TRUE))) %>% pivot_longer(., cols = everything())
@@ -34,18 +33,8 @@ column_summary <- function(data){
   #format like example
   data_num_updated['Mean (sd) or Distinct Values'] <- paste0(round(data_num_updated$Mean,2), ' +/- (', round(data_num_updated$sd,2), ')')
   data_num_updated <- data_num_updated[c('Column Name', 'Mean (sd) or Distinct Values')]
-
-  # Replicate
-  data_num_updated['Replicate'] <- str_sub(data_num_updated$'Column Name', -1) 
   
-  # Timepoint
-  data_num_updated <- data_num_updated %>% mutate("Timepoint" = case_when(
-                                          str_starts(`Column Name`, "ex") ~  str_sub(data_num_updated$`Column Name`, 3,-3),
-                                          (str_sub(`Column Name`, 2, 2) == "P") ~ str_sub(data_num_updated$`Column Name`, 2,3),
-                                          (str_sub(`Column Name`, 2, 2) == "D") ~ str_sub(data_num_updated$`Column Name`, 2,4),
-                                          (str_sub(`Column Name`, 2, 3) == "Ad") ~ "Ad",
-                                          TRUE ~ NA_character_
-                                        ))
+ 
   #Cell Type
   data_num_updated <- data_num_updated %>% mutate("Cell Type" = case_when(
                                           str_starts(`Column Name`, "e") ~ "Explanted, dissociated adult cardiomyocytes",
@@ -53,6 +42,28 @@ column_summary <- function(data){
                                           str_starts(`Column Name`, "i") ~ "In vitro isolated Cardiomyocytes",
                                           TRUE ~ NA_character_
                                           ))
+  #Cell Stage
+  data_num_updated <- data_num_updated %>% mutate("Cell Stage" = case_when(
+    str_starts(`Column Name`, "e") ~ "Adult CM Exmplant",
+    str_starts(`Column Name`, "vP") ~ "In vivo Maturation using ventricular samples",
+    str_starts(`Column Name`, "vA") ~ "In vivo Maturation using ventricular samples",
+    str_starts(`Column Name`, "vD") ~ "In vivo Regeneration using ventricular samples",
+    str_starts(`Column Name`, "iP") ~ "In vivo Maturation using iCM samples",
+    str_starts(`Column Name`, "iD") ~ "In vivo Regeneration using iCM samples",
+    TRUE ~ NA_character_
+  ))
+  
+  # Timepoint
+  data_num_updated <- data_num_updated %>% mutate("Timepoint" = case_when(
+    str_starts(`Column Name`, "ex") ~  str_sub(data_num_updated$`Column Name`, 3,-3),
+    (str_sub(`Column Name`, 2, 2) == "P") ~ str_sub(data_num_updated$`Column Name`, 2,3),
+    (str_sub(`Column Name`, 2, 2) == "D") ~ str_sub(data_num_updated$`Column Name`, 2,4),
+    (str_sub(`Column Name`, 2, 3) == "Ad") ~ "Ad",
+    TRUE ~ NA_character_))
+  
+  # Replicate
+  data_num_updated['Replicate'] <- str_sub(data_num_updated$'Column Name', -1) 
+  
   
   # # Concatenate unique instances of the Value column into one cell
   data_cat_gene <- paste0(data$Gene[1], ", etc...")
@@ -66,6 +77,7 @@ column_summary <- function(data){
   data_cat_updated['Replicate'] <- "N/A"
   data_cat_updated['Timepoint'] <- "N/A"
   data_cat_updated['Cell Type'] <- "N/A"
+  data_cat_updated['Cell Stage'] <- "N/A"
   
   # Row bind character and numeric values
   updated <- rbind(data_cat_updated, data_num_updated)
@@ -81,7 +93,6 @@ column_summary <- function(data){
   
   return(updated)
 }
-
 
 plot_continous_var <- function(data, column_name){
   
@@ -102,7 +113,6 @@ plot_continous_var <- function(data, column_name){
   return(plot_df)
 }
 
-
 #' Counts Matrix exploration 
 #' Input controls that filter out genes based on their statistical properties:
 #' Slider to include genes with at least X percentile of variance
@@ -122,7 +132,7 @@ counts_matrix_exploration <- function(data, filter_var, filter_non_zero){
   data$Median_Count <- row_median
   
   #'Include genes with at least X percentile of variance and genes with at least X samples that are non-zero (0-35 columns)
-  filtered_data_on_var <- data[data$Variance < quantile(data$Variance, filter_var), ] #keep rows when Variance is greater than certain percentile 
+  filtered_data_on_var <- data[data$Variance >= quantile(data$Variance, filter_var), ] #keep rows when Variance is greater than certain percentile 
   filtered_data_on_var_non_zero <- filtered_data_on_var[filtered_data_on_var$Number_of_Non_Zeros >= filter_non_zero, ] #count number of zeros per row 
   #filtered_data_on_var_non_zero$Passed_Filter = 'True'
   
@@ -198,78 +208,102 @@ PCA_plot <- function(data, PC_x, PC_y) {
   #' Tab with a scatter plot of principal component analysis projections. You may either:
   
   #Subset data
-  data <- data[, c(1,4:39)]
+  data <- data[, c(4:39)]
     
   #convert to dataframe to complete PC analysis
   data <- as.data.frame(data)
     
   #PCA calculation
-  pca_results <- prcomp(scale(t(data)), center=FALSE, scale=FALSE)
-  
-  # % variance explained 
-  #pc_variance_explained <- round((((pca_results$sdev)**2)/sum(((pca_results$sdev)**2)))*100, 0)
-  
+  pca_results <- prcomp(t(data))
+   
+  # % variance explained
+  pc_variance_explained <- round((((pca_results$sdev)**2)/sum(((pca_results$sdev)**2)))*100, 0)
   #name pc_variance_explained (vector) to variance_explained (tibble)
-  #var_exp_tib <- tibble("variance_explained_percent" = pc_variance_explained)
-  
-  #extract principal components
-  #pca_results_subset <- pca_results$x
-  
-  # Create a data frame with PC2 and PC6
-  #pc_data <- data.frame((paste0('PC',PC_x) = pca_results_subset[, PC_x]), (paste0('PC',PC_y) = pca_results_subset[, PC_y]))
-  
+  var_exp_tib <- tibble("variance_explained_percent" = pc_variance_explained)
+  #extract principal components that required
+  pca_results_subset <- data.frame(pca_results$x[,c(PC_x, PC_y)])
   #Get column_names
-  #first_column_name <- colnames(pc_data)[1]
-  #second_column_name <- colnames(pc_data)[2]
-  
-  
-  #' allow the user to select which principal components to plot in a scatter plot (e.g. PC1 vs PC2)
- # scatterplot_PCA <- pc_data %>%
-  #                    ggplot(aes(x = first_column_name, y = second_column_name)) +
-   #                   geom_point() +
-    #                  ggtitle(title = 'Principal Component Scatterplot') +
-    #                  xlab(paste(first_column_name, ": ", var_exp_tib[PC_x,], '% Variance')) + #' be sure to include the % variance explained by each component in the plot labels
+  first_column_name <- colnames(pca_results_subset)[1]
+  second_column_name <- colnames(pca_results_subset)[2]
 
-  #                    ylab(paste(second_column_name, ": ", var_exp_tib[PC_y,], '% Variance'))
-  return(pca_results)
+  #' #' allow the user to select which principal components to plot in a scatter plot (e.g. PC1 vs PC2)
+  scatterplot_PCA <- pca_results_subset %>%
+                      ggplot(aes(x = .data[[first_column_name]], y = .data[[second_column_name]])) +
+                      geom_point() +
+                      ggtitle('Principal Component Scatterplot') +
+                      xlab(paste0('PC',PC_x, ": ", var_exp_tib[PC_x,], '% Variance')) + #' be sure to include the % variance explained by each component in the plot labels
+                      ylab(paste0('PC', PC_y, ": ", var_exp_tib[PC_y,], '% Variance'))
+  return(scatterplot_PCA)
 }
 
 #' Differential Expression
 #' Results of a differential expression analysis in CSV format.
 #' If results are already made available, you may use those
-#' Otherwise perform a differential expression analysis using DESeq2, limma, or edgeR from the provided counts file
-
-diff_eq <- function(data){
+#' Otherwise perform a differential expression analysis using DESeq2
+diff_eq <- function(filtered_data, metadata, cell_stage){
+  
+  if (cell_stage == "vP") {
+    cell_stage <- c("vP", "vA")
+    factor_level <- c("P0", "P4", "P7", "Ad")
+  }
+  
+  else if (cell_stage == "ex") {
+    factor_level <- c("0hr", "24hr", "48hr", "72hr")
+  } 
+  else if (cell_stage == "iP") {
+    factor_level <- c("P0", "P4")
+  }
+  else if (cell_stage == "iD") {
+    factor_level <- c("D7S", "D7R")
+  }
+  else {
+    factor_level <- c("D1S", "D1R", "D7S", "D7R")
+  }
+  
   #Subset data
-  data <- data[, c(1,4:39)]
-  #rownames as Gene
-  data <- data %>% column_to_rownames(var = "Gene")
+  filtered_data <- filtered_data[, c(1,4:39)]
+  #rownames as Gene, select certain columns, make all values integers
+  filtered_data <- filtered_data %>% column_to_rownames(var = "Gene") %>% dplyr::select(starts_with(cell_stage)) %>% round(.)
   #Deseq2 takes in matrix
-  filtered_data_matrix <- as.matrix(data)
+  filtered_data_matrix <- as.matrix(filtered_data)
   
-  #column metadata
-  sample_names <- colnames(data)
-  timepoint <- str_sub(sample_names, 1,-3) #extract string from index 2 through 3
-  #replicate #
-  replicate <- str_sub(sample_names, -1) #extract string from index 5 through length of string
+  #column metadata - keep only important info
+  metadata <- metadata %>% select("Column Name", "Cell Stage", "Cell Type", "Timepoint", "Replicate") %>% 
+                         subset(Replicate != "N/A") %>% 
+                         rename(Sample = "Column Name") %>% 
+                         filter(Sample %in% colnames(filtered_data_matrix))
+  
   #tibble of column metadata
-  metadata <- as_tibble(cbind(sample_names, timepoint, replicate)) #bind all columns
+  metadata <- as_tibble(metadata)
+  # Specify reference levels for Timepoint and Cell Type
+  metadata$Timepoint <- factor(metadata$Timepoint, levels = factor_level)
+ 
+  #store counts matrix and sample df in a SummarizedExperiments object
+  se <- SummarizedExperiment(assays = list(counts = filtered_data_matrix), #subsetted counts matrix
+                             colData = metadata) #store your sample dataframe as colData
+  ddsSE <- DESeqDataSet(se, design = ~Timepoint)
   
-  #DDS
-  dds <- DESeqDataSetFromMatrix(countData= filtered_data_matrix, 
-                                colData=tibble(sample_names), 
-                                design= ~1)
+  #results from DESeq2 as df
+  dds <- DESeq(ddsSE)
+  dds_results <- results(dds)
+  dds_results <- as.data.frame(dds_results)
+  dds_results <- tibble::rownames_to_column(dds_results, "Genes") 
   
-  # Perform differential expression analysis
-  dds <- DESeq(dds)
+  # dds <- DESeqDataSetFromMatrix(countData= filtered_data_matrix, 
+  #                               colData=metadata, 
+  #                               design= ~Timepoint)
+  # # compute normalization factors
+  # dds <- estimateSizeFactors(dds)
+  # 
+  # # extract the normalized counts
+  # dds <- as_tibble(counts(dds, normalized=TRUE)) %>%
+  #   mutate(gene = count_data$gene) %>%
+  #   relocate(gene) # relocate changes column order
+  # # Perform differential expression analysis
+  # dds <- DESeq(dds)
+  # results <- results(dds)
   
-  # Get the results
-  results <- results(dds)
-  
-  # Save results to a CSV file
-  write.csv(as.data.frame(results), "differential_expression_results.csv", row.names = TRUE)
-  
-  return(metadata)
+  return(dds_results)
 }
 
 #' Tab with sortable table displaying differential expression results
@@ -277,73 +311,6 @@ diff_eq <- function(data){
 
 #' Tab with content similar to that described in [Assignment 7] (R shiny App)
 
-
-#' @param csv_path (str): path to the file verse_counts.tsv
-#' @param metafile (str): path to the metadata sample_metadata.csv
-#' @param selected_times (list): list of sample timepoints to use
-#' 
-#'   
-#' @return SummarizedExperiment object with subsetted counts matrix
-#'   and sample data. Ensure that the timepoints column used as input 
-#'   to the model design has 'vP0' set as the reference factor level. Your 
-#'   colData dataframe should have columns named samplename and timepoint.
-#' @export
-#'
-#' @examples se <- make_se('verse_counts.tsv', 'sample_metadata.csv', c('vP0', 'vAd'))
-make_se <- function(counts_csv, metafile_csv, selected_times) {
-  
-  #read files
-  count_data <- readr::read_tsv(counts_csv)
-  metadata <- readr::read_csv(metafile_csv)
-  
-  #gene name
-  gene <- count_data$gene
-  
-  #keep count columns that contain third parameter, select does not work with tibble
-  count_df <- data.frame(count_data) %>% dplyr::select(contains(selected_times)) 
-  count_matrix <- data.matrix(count_df)
-  dimnames(count_matrix) <- list(gene) #make genes into row names; dimnames requires list
-  colnames(count_matrix) <- colnames(count_df)
-  
-  #metadata needs only samplename, timepoint, filter to keep only rows in selected times
-  metadata_df <- data.frame(metadata) %>% dplyr::select(c(samplename, timepoint)) %>% filter(timepoint %in% selected_times)
-  
-  #timepoint is a factor
-  metadata_df$timepoint <- factor(metadata_df$timepoint, levels = selected_times)
-  
-  #store counts matrix and sample df in a SummarizedExperiments object
-  se <- SummarizedExperiment(assays = list(counts = count_matrix), #subsetted counts matrix
-                             colData = metadata_df) #store your sample dataframe as colData
-  
-  return(se)
-}
-
-#' Function that runs DESeq2 and returns a named list containing the DESeq2
-#' results as a dataframe and the dds object returned by DESeq2
-#'
-#' @param se (obj): SummarizedExperiment object containing counts matrix and
-#' coldata
-#' @param design: the design formula to be used in DESeq2
-#'
-#' @return list with DESeqDataSet object after running DESeq2 and results from
-#'   DESeq2 as a dataframe
-#' @export
-#'
-#' @examples results <- return_deseq_res(se, ~ timepoint)
-return_deseq_res <- function(se, design) {
-  
-  ddsSE <- DESeqDataSet(se, design = design)
-  
-  #results from DESeq2 as df
-  dds <- DESeq(ddsSE)
-  dds_results <- results(dds)   #DESeqDataSet object updated ???
-  dds_results_df <- as.data.frame(dds_results)
-  
-  #return list
-  results_list <- list(Results = dds_results_df, DESeqDataSet = dds)
-  
-  return(results_list)
-}
 
 #' Function that takes the DESeq2 results dataframe, converts it to a tibble and
 #' adds a column to denote plotting status in volcano plot. Column should denote

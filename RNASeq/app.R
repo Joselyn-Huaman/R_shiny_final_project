@@ -14,16 +14,18 @@ library(hrbrthemes) #theme_ipsum
 library(pheatmap)
 library(Cairo)
 library(patchwork)
-#library(profvis)
 library(plotly)
-
+library(future)
+plan(multisession)
 
 # Increase the maximum upload size (in bytes)
 options(shiny.maxRequestSize = 30 * 1024^2)  # Set to 30 MB
 
 #profvis({
 # Define UI for application that draws a histogram
-ui <- fluidPage(tabsetPanel(
+ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"), 
+                titlePanel("BF591: Analysis of RNA-Seq Data"), 
+                tabsetPanel(
                   tabPanel("Samples", 
                            sidebarLayout(
                              sidebarPanel(
@@ -38,10 +40,9 @@ ui <- fluidPage(tabsetPanel(
                                             HTML("e = Explanted, dissociated adult cardiomyocytes<br>"),
                                             HTML("v = In vivo ventricular myocardium<br>"),
                                             HTML("i = In vitro isolated Cardiomyocytes<br><br>"),
-                                            radioButtons(inputId = "subset_data", "Choose the Cell Type to plot", 
+                                            radioButtons(inputId = "subset_data", label = HTML("<strong>Choose the Cell Type to plot</strong>"), 
                                                         choices = c("e", "v", "i"), selected = 'e'),
-                                            actionButton("Sample_btn", "Violin Plot", icon = icon("play"), class = "btn-block"),
-                                          plotOutput("Continous_plot"), width = "100%", height =  "1500px")
+                                            plotOutput("Continous_plot"), width = "100%", height =  "1500px")
                              )
                             )
                            )
@@ -51,8 +52,8 @@ ui <- fluidPage(tabsetPanel(
                              sidebarPanel(
                                fileInput("Normalized_Count_File", "Choose a (normalized) txt file", accept = '.txt'),
                                HTML("All analysis on the Counts tab takes normalized filtered data based on the sliders as an input"),
-                               sliderInput(inputId =  "percentile_variance", "Include genes that have at least X percentile of variance", min = 0, max = 1, value = .75),
-                               sliderInput(inputId =  "min_non_zero", "Include genes that have at least X samples that are non-zero", min = 0, max = 36, value = 3),
+                               sliderInput(inputId =  "percentile_variance", label = HTML("Include genes that have at least <em>X</em> percentile of variance"), min = 0, max = 1, value = .75),
+                               sliderInput(inputId =  "min_non_zero", label = HTML("Include genes that have at least <em>X</em> samples that are non-zero"), min = 0, max = 36, value = 3),
                                actionButton(inputId = 'Counts_btn', 'Add Filter', icon = icon('plus'), class = 'btn-block')
                           ),
                           mainPanel(
@@ -60,35 +61,47 @@ ui <- fluidPage(tabsetPanel(
                               tabPanel("Filtered Summary", tableOutput("Filtered_Summary_table")),
                               tabPanel("Diagnostic ScatterPlot", plotOutput("Diagnostic_plot")),
                               tabPanel("Heatmap", shiny::div(style = "overflow-x: auto; overflow-y: auto; white-space: nowrap;", plotOutput("Heatmap_plot", height = '400px'))),
-                              tabPanel("PCA", plotOutput("PCA_plot"))
+                              tabPanel("PCA",
+                                       HTML("<strong>Choose Principal Components to Plot</strong> <br>"),
+                                       fluidRow(
+                                         column(6, numericInput("First_PC", "Select principal components to plot on the x-axis", 1, min = 1, max = 40)),
+                                         column(6, numericInput("Second_PC", "Select principal components to plot on the y-axis", 2, min = 1, max = 40))
+                                       ), 
+                                       plotOutput("PCA_plot"))
                             )
                           )
+                          )
                   ),
-                  tabPanel("DE"),
+                  tabPanel("DE",
+                           mainPanel(
+                             HTML("<strong>The normalized count data has undergone different expression analysis via DESeq2</strong> <br> <br>"),
+                             radioButtons(inputId = "cell_stage", label = HTML("<strong>Choose the Cell Stage to subset</strong>"), 
+                                         choices = c("ex", "vP", "vD", "iP", "iD"), selected = 'vP'),
+                             tabsetPanel(
+                               tabPanel("Differential Expression Results", dataTableOutput("Diff_eq_table")),
+                               tabPanel("Volcano Plot",
+                                        sidebarLayout(
+                                            sidebarPanel(
+                                              HTML("A volcano plot can be generated with <b> log2 fold-change </b> on the x-axis and <b> p-adjusted </b> on the y-axis. <p>"),
+                                              radioButtons(inputId = "x_axis", "Choose the column for the x-axis",
+                                                           choices = c("baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"), selected = 'log2FoldChange'),
+                                              radioButtons(inputId =  "y_axis", "Choose the column for the y-axis",
+                                                           choices = c("baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"), selected = 'padj'),
+                                              colourInput("color_base", "Select Base Point Color", "#F033A4"),
+                                              colourInput("color_highlight", "Select Highlight Point Color", "#F7D513"),
+                                              tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar {background: purple}")), #color slider purple
+                                              sliderInput(inputId =  "padj_color", "Select the magnitude of the p adjusted coloring:", min = -300, max = 0, value = -100),
+                                              actionButton("run_button", "Plot", icon = icon("image"), class = "btn-block")
+                                            ),
+                                            mainPanel(
+                                              plotOutput("volcano_plot")
+                                            )
+                                        )
+                               )
+                             )
+                           )
+                  ),
                   tabPanel("Unsure")
-            )
-                # titlePanel("BF591: Assignment 7"), # app title
-                # sidebarLayout( # Sidebar layout with input and output definitions
-                #   sidebarPanel(# Sidebar panel for inputs
-                #     fileInput("file", "Load differential expression results", accept = '.csv'), #load file
-                #     HTML("A volcano plot can be generated with <b> log2 fold-change </b> on the x-axis and <b> p-adjusted </b> on the y-axis. <p>"), 
-                #     radioButtons(inputId = "x_axis", "Choose the column for the x-axis", 
-                #                  choices = c("baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"), selected = 'log2FoldChange'),
-                #     radioButtons(inputId =  "y_axis", "Choose the column for the y-axis", 
-                #                  choices = c("baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"), selected = 'padj'),
-                #     colourInput("color_base", "Select Base Point Color", "#F033A4"),
-                #     colourInput("color_highlight", "Select Highlight Point Color", "#F7D513"),
-                #     tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar {background: purple}")), #color slider purple
-                #     sliderInput(inputId =  "padj_color", "Select the magnitude of the p adjusted coloring:", min = -300, max = 0, value = -100),
-                #     actionButton("run_button", "Plot", icon = icon("play"), class = "btn-block")
-                #   ),
-                #   mainPanel( # Main panel for displaying outputs
-                #     tabsetPanel(
-                #       tabPanel("Volcano Plot", plotOutput("volcano")), #Volcano Plot tab
-                #       tabPanel("Table", tableOutput("table"))  #Table tab
-                #     )
-                #   )
-                # )
   )
 
 )
@@ -125,8 +138,13 @@ server <- function(input, output, session) {
     data_num_updated['Mean (sd) or Distinct Values'] <- paste0(round(data_num_updated$Mean,2), ' +/- (', round(data_num_updated$sd,2), ')')
     data_num_updated <- data_num_updated[c('Column Name', 'Mean (sd) or Distinct Values')]
     
-    # Replicate
-    data_num_updated['Replicate'] <- str_sub(data_num_updated$'Column Name', -1) 
+    #Cell Type
+    data_num_updated <- data_num_updated %>% mutate("Cell Type" = case_when(
+      str_starts(`Column Name`, "e") ~ "Explanted, dissociated adult cardiomyocytes",
+      str_starts(`Column Name`, "v") ~ "In vivo ventricular myocardium",
+      str_starts(`Column Name`, "i") ~ "In vitro isolated Cardiomyocytes",
+      TRUE ~ NA_character_
+    ))
     
     # Timepoint
     data_num_updated <- data_num_updated %>% mutate("Timepoint" = case_when(
@@ -136,11 +154,17 @@ server <- function(input, output, session) {
       (str_sub(`Column Name`, 2, 3) == "Ad") ~ "Ad",
       TRUE ~ NA_character_
     ))
-    #Cell Type
-    data_num_updated <- data_num_updated %>% mutate("Cell Type" = case_when(
-      str_starts(`Column Name`, "e") ~ "Explanted, dissociated adult cardiomyocytes",
-      str_starts(`Column Name`, "v") ~ "In vivo ventricular myocardium",
-      str_starts(`Column Name`, "i") ~ "In vitro isolated Cardiomyocytes",
+    
+    # Replicate
+    data_num_updated['Replicate'] <- str_sub(data_num_updated$'Column Name', -1) 
+    
+    #Cell Stage
+    data_num_updated <- data_num_updated %>% mutate("Cell Stage" = case_when(
+      str_starts(`Column Name`, "e") ~ "Adult CM Exmplant",
+      str_starts(`Column Name`, "vP") ~ "In vivo Maturation using ventricular samples",
+      str_starts(`Column Name`, "vD") ~ "In vivo Regeneration using ventricular samples",
+      str_starts(`Column Name`, "iP") ~ "In vivo Maturation using iCM samples",
+      str_starts(`Column Name`, "iD") ~ "In vivo Regeneration using iCM samples",
       TRUE ~ NA_character_
     ))
     
@@ -156,6 +180,7 @@ server <- function(input, output, session) {
     data_cat_updated['Replicate'] <- "N/A"
     data_cat_updated['Timepoint'] <- "N/A"
     data_cat_updated['Cell Type'] <- "N/A"
+    data_cat_updated['Cell Stage'] <- "N/A"
     
     # Row bind character and numeric values
     updated <- rbind(data_cat_updated, data_num_updated)
@@ -170,7 +195,6 @@ server <- function(input, output, session) {
     
     return(updated)
   }
-  
   #' Tab with histograms, density plots, or violin plots of continuous variables.
   #'    If you want to make it fancy, allow the user to choose which column to plot and another column to group by!
   plot_continous_var <- function(data, cell_type_choosen){
@@ -210,18 +234,17 @@ server <- function(input, output, session) {
     data$Median_Count <- row_median
     
     #'Include genes with at least X percentile of variance and genes with at least X samples that are non-zero (0-35 columns)
-    filtered_data_on_var <- data[data$Variance < quantile(data$Variance, percentile_variance), ] #keep rows when Variance is greater than certain percentile 
+    filtered_data_on_var <- data[data$Variance >= quantile(data$Variance, percentile_variance), ] #keep rows when Variance is greater than certain percentile 
     filtered_data_on_var_non_zero <- filtered_data_on_var[filtered_data_on_var$Number_of_Non_Zeros >= min_non_zero, ] #count number of zeros per row 
 
     return(list(data, filtered_data_on_var_non_zero)) 
     
   }
-  
   #' Tab with text or a table summarizing the effect of the filtering, including:
   #' number of samples, total number of genes, number and % of genes passing current filter, number and % of genes not passing current filter
   filtered_summary_table <- function(data, f_data){
     
-    num_sample <- ncol(data) -2-3-2
+    num_sample <- ncol(data) -2-3-3
     total_num_genes <- nrow(data)
     num_genes_pass <- nrow(f_data)
     perc_genes_pass <- round(num_genes_pass/total_num_genes, 4)*100
@@ -236,7 +259,6 @@ server <- function(input, output, session) {
     return(table_summarize)
     
   }
-  
   #' Tab with diagnostic scatter plots, where genes passing filters are marked in a darker color, and genes filtered out are lighter:
   diagnostic_scatter_plots <- function(data, f_data){
 
@@ -286,7 +308,90 @@ server <- function(input, output, session) {
     
     return(hetmap)
   }
-  #' 
+  #' Tab with a scatter plot of principal component analysis projections.
+  PCA_plot <- function(data, PC_x, PC_y) {
+    #Subset data
+    data <- data[, c(4:39)]
+    
+    #convert to dataframe to complete PC analysis
+    data <- as.data.frame(data)
+    
+    #PCA calculation
+    pca_results <- prcomp(t(data))
+    
+    # % variance explained
+    pc_variance_explained <- round((((pca_results$sdev)**2)/sum(((pca_results$sdev)**2)))*100, 0)
+    #name pc_variance_explained (vector) to variance_explained (tibble)
+    var_exp_tib <- tibble("variance_explained_percent" = pc_variance_explained)
+    #extract principal components that required
+    pca_results_subset <- data.frame(pca_results$x[,c(PC_x, PC_y)])
+    #Get column_names
+    first_column_name <- colnames(pca_results_subset)[1]
+    second_column_name <- colnames(pca_results_subset)[2]
+    
+    #'allow the user to select which principal components to plot in a scatter plot (e.g. PC1 vs PC2)
+    scatterplot_PCA <- pca_results_subset %>%
+                        ggplot(aes(x = .data[[first_column_name]], y = .data[[second_column_name]])) +
+                        geom_point() +
+                        ggtitle('Principal Component Scatterplot') +
+                        xlab(paste0('PC',PC_x, ": ", var_exp_tib[PC_x,], '% Variance')) +
+                        ylab(paste0('PC', PC_y, ": ", var_exp_tib[PC_y,], '% Variance'))
+    
+    return(scatterplot_PCA)
+  }
+  
+  #' Tab with sortable table displaying differential expression results
+  diff_eq <- function(filtered_data, metadata, cell_stage){
+    
+    if (cell_stage == "vP") {
+      cell_stage <- c("vP", "vA")
+      factor_level <- c("P0", "P4", "P7", "Ad")
+    }
+    
+    else if (cell_stage == "ex") {
+      factor_level <- c("0hr", "24hr", "48hr", "72hr")
+    } 
+    else if (cell_stage == "iP") {
+      factor_level <- c("P0", "P4")
+    }
+    else if (cell_stage == "iD") {
+      factor_level <- c("D7S", "D7R")
+    }
+    else {
+      factor_level <- c("D1S", "D1R", "D7S", "D7R")
+    }
+    
+    #Subset data
+    filtered_data <- filtered_data[, c(1,4:39)]
+    #rownames as Gene, select certain columns, make all values integers
+    filtered_data <- filtered_data %>% column_to_rownames(var = "Gene") %>% dplyr::select(starts_with(cell_stage)) %>% round(.)
+    #Deseq2 takes in matrix
+    filtered_data_matrix <- as.matrix(filtered_data)
+    
+    #column metadata - keep only important info
+    metadata <- metadata %>% select("Column Name", "Cell Stage", "Cell Type", "Timepoint", "Replicate") %>% 
+      subset(Replicate != "N/A") %>% 
+      rename(Sample = "Column Name") %>% 
+      filter(Sample %in% colnames(filtered_data_matrix))
+    
+    #tibble of column metadata
+    metadata <- as_tibble(metadata)
+    # Specify reference levels for Timepoint and Cell Type
+    metadata$Timepoint <- factor(metadata$Timepoint, levels = factor_level)
+    
+    #store counts matrix and sample df in a SummarizedExperiments object
+    se <- SummarizedExperiment(assays = list(counts = filtered_data_matrix), #subsetted counts matrix
+                               colData = metadata) #store your sample dataframe as colData
+    ddsSE <- DESeqDataSet(se, design = ~Timepoint)
+    
+    #results from DESeq2 as df
+    dds <- DESeq(ddsSE)
+    dds_results <- results(dds)   #DESeqDataSet object updated ???
+    dds_results_df <- as.data.frame(dds_results)
+    dds_results_df <- tibble::rownames_to_column(dds_results_df, "Genes") 
+    return(dds_results_df)
+  }
+  
   # # Helper function to render plot
   # renderVolcanoPlot <- function() {
   #   req(load_data()) #require load_data()
@@ -317,52 +422,91 @@ server <- function(input, output, session) {
   
   output$DataTable_table <- renderDataTable({load_data()})
   
-  renderContinoutVarPlot <- function() {
+  output$Continous_plot <- renderPlot({
     req(input$subset_data)
-    isolate({ 
-      plot_continous_var(load_data(), input$subset_data)
-    })
-  }
-  
-  output$Continous_plot <- renderPlot({renderContinoutVarPlot()}, height = 1500)
-  
-  observeEvent(input$Sample_btn, {
-    output$Continous_plot <- renderPlot({renderContinoutVarPlot()}, height = 1500)})
+    isolate({plot_continous_var(load_data(), input$subset_data)})
+  }, height = 1500)
   
   # Render objects for Counts tab
-  renderFiltered_S_table <- function() {
-    req(load_data())
-    isolated_data <- isolate({filtered_data(load_data(), input$percentile_variance, input$min_non_zero)
-    })
-    filtered_summary_table(isolated_data[[1]], isolated_data[[2]])
+  # Function to process data based on file input and filtering parameters
+  processData <- function(file, percentile_variance, min_non_zero) {
+    req(file)
+    data <- filtered_data(file, percentile_variance, min_non_zero)
+    list(
+      summary_table = filtered_summary_table(data[[1]], data[[2]]),
+      diagnostic_plot = diagnostic_scatter_plots(data[[1]], data[[2]]),
+      heatmap_plot = clustered_heatmap(data[[2]]),
+      pca_plot = PCA_plot(data[[2]], input$First_PC, input$Second_PC),
+      diff_eq_table = diff_eq(data[[2]], column_summary(load_data()), input$cell_stage)
+    )
   }
-  output$Filtered_Summary_table <- renderTable({renderFiltered_S_table()})
-  observeEvent(input$Counts_btn, {
-    output$Filtered_Summary_table <- renderTable({renderFiltered_S_table()})})
   
+  # Reactive expression for file input
+  data <- eventReactive(load_data(), {
+    processData(load_data(), input$percentile_variance, input$min_non_zero)
+  })
   
-  renderScatterePlot <- function() {
-    req(load_data())
-    isolated_data <- isolate({filtered_data(load_data(), input$percentile_variance, input$min_non_zero)
-    })
-    diagnostic_scatter_plots(isolated_data[[1]], isolated_data[[2]])
-  }
-  output$Diagnostic_plot <- renderPlot({renderScatterePlot()})
-  observeEvent(input$Sample_btn, {
-    output$Diagnostic_plot <- renderPlot({renderScatterePlot()})})
+  # Render plots based on reactive expression
+  output$Filtered_Summary_table <- renderTable({
+    data()$summary_table
+  })
   
-  renderHeatmapPlot <- function() {
-    req(load_data())
-    isolated_data <- isolate({filtered_data(load_data(), input$percentile_variance, input$min_non_zero)
-    })
-    clustered_heatmap(isolated_data[[2]])
-  }
-  output$Heatmap_plot <-  renderPlot({renderHeatmapPlot()}, height = 400)
-  observeEvent(input$Sample_btn, {
-    output$Heatmap_plot <- renderPlot({renderHeatmapPlot()}, height = 400)})
+  output$Diagnostic_plot <- renderPlot({
+    data()$diagnostic_plot
+  })
   
+  output$Heatmap_plot <- renderPlot({
+    data()$heatmap_plot
+  }, height = 400)
   
-
+  output$PCA_plot <- renderPlot({
+    data()$pca_plot
+  })
+  
+  output$Diff_eq_table <- renderDataTable({
+    data()$diff_eq_table
+  })
+#   renderFiltered_S_table <- function() {
+#     req(load_data())
+#     isolated_data <- isolate({filtered_data(load_data(), input$percentile_variance, input$min_non_zero)
+#     })
+#     filtered_summary_table(isolated_data[[1]], isolated_data[[2]])
+#   }
+#   output$Filtered_Summary_table <- renderTable({renderFiltered_S_table()})
+#   observeEvent(input$Counts_btn, {
+#     output$Filtered_Summary_table <- renderTable({renderFiltered_S_table()})})
+#   
+#   
+#   renderScatterePlot <- function() {
+#     req(load_data())
+#     isolated_data <- isolate({filtered_data(load_data(), input$percentile_variance, input$min_non_zero)
+#     })
+#     diagnostic_scatter_plots(isolated_data[[1]], isolated_data[[2]])
+#   }
+#   output$Diagnostic_plot <- renderPlot({renderScatterePlot()})
+#   observeEvent(input$Counts_btn, {
+#     output$Diagnostic_plot <- renderPlot({renderScatterePlot()})})
+#   
+#   renderHeatmapPlot <- function() {
+#     req(load_data())
+#     isolated_data <- isolate({filtered_data(load_data(), input$percentile_variance, input$min_non_zero)
+#     })
+#     clustered_heatmap(isolated_data[[2]])
+#   }
+#   output$Heatmap_plot <-  renderPlot({renderHeatmapPlot()}, height = 400)
+#   observeEvent(input$Counts_btn, {
+#     output$Heatmap_plot <- renderPlot({renderHeatmapPlot()}, height = 400)})
+#   
+#   renderPCPlot <- function() {
+#     req(load_data())
+#     isolated_data <- isolate({filtered_data(load_data(), input$percentile_variance, input$min_non_zero)
+#     })
+#     PCA_plot(isolated_data[[2]], input$First_PC, input$Second_PC)
+#   }
+#   output$PCA_plot <-  renderPlot({renderPCPlot()})
+#   observeEvent(input$Counts_btn, {
+#     output$Heatmap_plot <- renderPlot({renderPCPlot()})})
+# 
 }
 # Run the application
 shinyApp(ui = ui, server = server)
