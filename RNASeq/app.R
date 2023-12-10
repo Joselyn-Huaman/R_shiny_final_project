@@ -54,7 +54,7 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"),
                                HTML("All analysis on the Counts tab takes normalized filtered data based on the sliders as an input"),
                                sliderInput(inputId =  "percentile_variance", label = HTML("Include genes that have at least <em>X</em> percentile of variance"), min = 0, max = 1, value = .75),
                                sliderInput(inputId =  "min_non_zero", label = HTML("Include genes that have at least <em>X</em> samples that are non-zero"), min = 0, max = 36, value = 3),
-                               actionButton(inputId = 'Counts_btn', 'Add Filter', icon = icon('plus'), class = 'btn-block')
+                               actionButton(inputId = 'filter_btn', 'Add Filter', icon = icon('plus'), class = 'btn-block')
                           ),
                           mainPanel(
                             tabsetPanel(
@@ -400,35 +400,12 @@ server <- function(input, output, session) {
     plot_v <- ggplot(data = dataf) + #load data
       geom_point(aes(x = .data[[x_name]], y = -log10(.data[[y_name]]), col = .data[[y_name]] < slider)) + #get data columns and color based on if statement 
       scale_colour_manual(name = paste(y_name, '>', slider), values = setNames(c(color2,color1),c(T, F))) + #set colors and name
-      theme(legend.position="bottom") #change legend position
+      theme(legend.position="bottom") + #change legend position
+      ggtitle(paste0(x_name, "vs -log10(", y_name, ")"))
     
     return(plot_v)
   }
-  # # Helper function to render plot
-  # renderVolcanoPlot <- function() {
-  #   req(load_data()) #require load_data()
-  #   isolate({ #isolate the volcano plot function from changes in other reactive values.
-  #     volcano_plot(load_data(), input$x_axis, input$y_axis, input$padj_color, input$color_base, input$color_highlight)
-  #   })
-  # }
-  # 
-  # # Helper function to render table
-  # renderDataTable <- function() {
-  #   req(load_data()) #require load_data()
-  #   isolate({ #isolate the draw table function from changes in other reactive values.
-  #     draw_table(load_data(), input$padj_color)
-  #   })
-  # }
-  # 
-  # # Render the volcano plot
-  # output$volcano <- renderPlot({renderVolcanoPlot()})
-  #
-  # # Update data and re-render on actionButton click
-  # observeEvent(input$run_button, {
-  #   output$volcano <- renderPlot({renderVolcanoPlot()})
-  #   output$table <- renderTable({renderDataTable()})
-  # })
-  # 
+
   # Render objects for Sample tab
   output$Summary_table <- renderTable({column_summary(load_data())})
   
@@ -439,37 +416,42 @@ server <- function(input, output, session) {
     isolate({plot_continous_var(load_data(), input$subset_data)})
   }, height = 1500)
   
-  # Render objects for Counts tab
+  # Render objects for Counts and DE tab
   # Function to process data based on file input and filtering parameters
-  processData <- function(file, percentile_variance, min_non_zero) {
-    req(file)
-    data_result <- filtered_data(file, percentile_variance, min_non_zero)
-    if (length(data_result) == 2 && nrow(data_result[[2]]) > 0) {
-      
-      diff_eq_table <- diff_eq(data_result[[2]], column_summary(load_data()), input$cell_stage)
-      
-      list(
-        summary_table = filtered_summary_table(data_result[[1]], data_result[[2]]),
-        diagnostic_plot = diagnostic_scatter_plots(data_result[[1]], data_result[[2]]),
-        heatmap_plot = clustered_heatmap(data_result[[2]]),
-        pca_plot = PCA_plot(data_result[[2]], input$First_PC, input$Second_PC),
-        diff_eq_table = diff_eq_table, 
-        custom_volcano_plot = volcano_plot(diff_eq_table, input$x_axis, input$y_axis, input$padj_color, input$color_base, input$color_highlight)
-      )
-    } else {
-      list(summary_table = NULL)
-    }
-  }
+  # Define reactive values to store filter values
   
-  # Reactive expression for file input
-  data <- eventReactive(load_data(), {
-    processData(load_data(), input$percentile_variance, input$min_non_zero)
+  filterValues <- reactiveVal(list(
+    percentile_variance = 0.75,
+    min_non_zero = 3,
+    filtered_data = NULL
+  ))
+  
+  # Update filter values and filtered data when sliders are moved
+  observe({
+    filterValues(list(
+      percentile_variance = input$percentile_variance,
+      min_non_zero = input$min_non_zero,
+      filtered_data = filtered_data(load_data(), input$percentile_variance, input$min_non_zero)
+    ))
+  })
+  
+  # Reactive expression for different plots and tables
+  data <- reactive({
+    req(filterValues()$filtered_data)
+    
+    diff_eq_table <- diff_eq(filterValues()$filtered_data[[2]], column_summary(load_data()), input$cell_stage)
+    
+    list(
+      summary_table = filtered_summary_table(filterValues()$filtered_data[[1]], filterValues()$filtered_data[[2]]),
+      diagnostic_plot = diagnostic_scatter_plots(filterValues()$filtered_data[[1]], filterValues()$filtered_data[[2]]),
+      heatmap_plot = clustered_heatmap(filterValues()$filtered_data[[2]]),
+      pca_plot = PCA_plot(filterValues()$filtered_data[[2]], input$First_PC, input$Second_PC),
+      diff_eq_table_1 = diff_eq_table,
+      custom_volcano_plot = volcano_plot(diff_eq_table_1, input$x_axis, input$y_axis, input$padj_color, input$color_base, input$color_highlight)
+    )
   })
   
   # Render plots based on reactive expression
-  # output$Filtered_Summary_table <- renderTable({
-  #   data()$summary_table
-  # })
   output$Filtered_Summary_table <- renderTable({
       data()$summary_table
   })
