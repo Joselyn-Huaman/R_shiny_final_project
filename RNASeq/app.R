@@ -15,8 +15,8 @@ library(pheatmap)
 library(Cairo)
 library(patchwork)
 library(plotly)
-library(future)
-plan(multisession)
+#library(future)
+#plan(multisession)
 
 # Increase the maximum upload size (in bytes)
 options(shiny.maxRequestSize = 30 * 1024^2)  # Set to 30 MB
@@ -340,6 +340,7 @@ server <- function(input, output, session) {
     return(scatterplot_PCA)
   }
   
+  #' Differential Expression
   #' Tab with sortable table displaying differential expression results
   diff_eq <- function(filtered_data, metadata, cell_stage){
     
@@ -364,7 +365,7 @@ server <- function(input, output, session) {
     #Subset data
     filtered_data <- filtered_data[, c(1,4:39)]
     #rownames as Gene, select certain columns, make all values integers
-    filtered_data <- filtered_data %>% column_to_rownames(var = "Gene") %>% dplyr::select(starts_with(cell_stage)) %>% round(.)
+    filtered_data <- filtered_data %>% column_to_rownames(var = "Gene") %>% dplyr::select(starts_with(cell_stage)) %>% ceiling(.)
     #Deseq2 takes in matrix
     filtered_data_matrix <- as.matrix(filtered_data)
     
@@ -391,7 +392,18 @@ server <- function(input, output, session) {
     dds_results_df <- tibble::rownames_to_column(dds_results_df, "Genes") 
     return(dds_results_df)
   }
-  
+  #' Tab with content similar to that described in [Assignment 7] (volcano plot)
+  volcano_plot <-function(dataf, x_name, y_name, slider, color1, color2) {
+    
+    slider <- 1 * 10**slider #calculate slider to fit chart
+    
+    plot_v <- ggplot(data = dataf) + #load data
+      geom_point(aes(x = .data[[x_name]], y = -log10(.data[[y_name]]), col = .data[[y_name]] < slider)) + #get data columns and color based on if statement 
+      scale_colour_manual(name = paste(y_name, '>', slider), values = setNames(c(color2,color1),c(T, F))) + #set colors and name
+      theme(legend.position="bottom") #change legend position
+    
+    return(plot_v)
+  }
   # # Helper function to render plot
   # renderVolcanoPlot <- function() {
   #   req(load_data()) #require load_data()
@@ -431,14 +443,22 @@ server <- function(input, output, session) {
   # Function to process data based on file input and filtering parameters
   processData <- function(file, percentile_variance, min_non_zero) {
     req(file)
-    data <- filtered_data(file, percentile_variance, min_non_zero)
-    list(
-      summary_table = filtered_summary_table(data[[1]], data[[2]]),
-      diagnostic_plot = diagnostic_scatter_plots(data[[1]], data[[2]]),
-      heatmap_plot = clustered_heatmap(data[[2]]),
-      pca_plot = PCA_plot(data[[2]], input$First_PC, input$Second_PC),
-      diff_eq_table = diff_eq(data[[2]], column_summary(load_data()), input$cell_stage)
-    )
+    data_result <- filtered_data(file, percentile_variance, min_non_zero)
+    if (length(data_result) == 2 && nrow(data_result[[2]]) > 0) {
+      
+      diff_eq_table <- diff_eq(data_result[[2]], column_summary(load_data()), input$cell_stage)
+      
+      list(
+        summary_table = filtered_summary_table(data_result[[1]], data_result[[2]]),
+        diagnostic_plot = diagnostic_scatter_plots(data_result[[1]], data_result[[2]]),
+        heatmap_plot = clustered_heatmap(data_result[[2]]),
+        pca_plot = PCA_plot(data_result[[2]], input$First_PC, input$Second_PC),
+        diff_eq_table = diff_eq_table, 
+        custom_volcano_plot = volcano_plot(diff_eq_table, input$x_axis, input$y_axis, input$padj_color, input$color_base, input$color_highlight)
+      )
+    } else {
+      list(summary_table = NULL)
+    }
   }
   
   # Reactive expression for file input
@@ -447,66 +467,32 @@ server <- function(input, output, session) {
   })
   
   # Render plots based on reactive expression
+  # output$Filtered_Summary_table <- renderTable({
+  #   data()$summary_table
+  # })
   output$Filtered_Summary_table <- renderTable({
-    data()$summary_table
+      data()$summary_table
   })
   
   output$Diagnostic_plot <- renderPlot({
     data()$diagnostic_plot
   })
-  
+
   output$Heatmap_plot <- renderPlot({
     data()$heatmap_plot
   }, height = 400)
-  
+
   output$PCA_plot <- renderPlot({
     data()$pca_plot
   })
-  
+
   output$Diff_eq_table <- renderDataTable({
     data()$diff_eq_table
   })
-#   renderFiltered_S_table <- function() {
-#     req(load_data())
-#     isolated_data <- isolate({filtered_data(load_data(), input$percentile_variance, input$min_non_zero)
-#     })
-#     filtered_summary_table(isolated_data[[1]], isolated_data[[2]])
-#   }
-#   output$Filtered_Summary_table <- renderTable({renderFiltered_S_table()})
-#   observeEvent(input$Counts_btn, {
-#     output$Filtered_Summary_table <- renderTable({renderFiltered_S_table()})})
-#   
-#   
-#   renderScatterePlot <- function() {
-#     req(load_data())
-#     isolated_data <- isolate({filtered_data(load_data(), input$percentile_variance, input$min_non_zero)
-#     })
-#     diagnostic_scatter_plots(isolated_data[[1]], isolated_data[[2]])
-#   }
-#   output$Diagnostic_plot <- renderPlot({renderScatterePlot()})
-#   observeEvent(input$Counts_btn, {
-#     output$Diagnostic_plot <- renderPlot({renderScatterePlot()})})
-#   
-#   renderHeatmapPlot <- function() {
-#     req(load_data())
-#     isolated_data <- isolate({filtered_data(load_data(), input$percentile_variance, input$min_non_zero)
-#     })
-#     clustered_heatmap(isolated_data[[2]])
-#   }
-#   output$Heatmap_plot <-  renderPlot({renderHeatmapPlot()}, height = 400)
-#   observeEvent(input$Counts_btn, {
-#     output$Heatmap_plot <- renderPlot({renderHeatmapPlot()}, height = 400)})
-#   
-#   renderPCPlot <- function() {
-#     req(load_data())
-#     isolated_data <- isolate({filtered_data(load_data(), input$percentile_variance, input$min_non_zero)
-#     })
-#     PCA_plot(isolated_data[[2]], input$First_PC, input$Second_PC)
-#   }
-#   output$PCA_plot <-  renderPlot({renderPCPlot()})
-#   observeEvent(input$Counts_btn, {
-#     output$Heatmap_plot <- renderPlot({renderPCPlot()})})
-# 
+
+  output$volcano_plot <- renderPlot({
+    data()$custom_volcano_plot
+  })
 }
 # Run the application
 shinyApp(ui = ui, server = server)

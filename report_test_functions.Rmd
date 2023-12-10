@@ -50,6 +50,10 @@ print(pca)
 ```
 Differential Expression
 ```{r}
-df <- diff_eq(filtered_data, cs, "vP")
-print(df)
+
+print(colnames(cs))
+diffeq_data <- diff_eq(filtered_data, cs, "vP")
+print(diffeq_data)
+#vp <- volcano_plot(diffeq_data, "log2FoldChange", "padj", -50,"#F033A4", "#F7D513")
+#print(vp)
 ```

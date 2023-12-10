@@ -240,6 +240,8 @@ PCA_plot <- function(data, PC_x, PC_y) {
 #' Results of a differential expression analysis in CSV format.
 #' If results are already made available, you may use those
 #' Otherwise perform a differential expression analysis using DESeq2
+
+#' Tab with sortable table displaying differential expression results
 diff_eq <- function(filtered_data, metadata, cell_stage){
   
   if (cell_stage == "vP") {
@@ -263,31 +265,33 @@ diff_eq <- function(filtered_data, metadata, cell_stage){
   #Subset data
   filtered_data <- filtered_data[, c(1,4:39)]
   #rownames as Gene, select certain columns, make all values integers
-  filtered_data <- filtered_data %>% column_to_rownames(var = "Gene") %>% dplyr::select(starts_with(cell_stage)) %>% round(.)
+  filtered_data <- filtered_data %>% column_to_rownames(var = "Gene") %>% dplyr::select(starts_with(cell_stage)) %>% ceiling(.)
   #Deseq2 takes in matrix
   filtered_data_matrix <- as.matrix(filtered_data)
   
   #column metadata - keep only important info
   metadata <- metadata %>% select("Column Name", "Cell Stage", "Cell Type", "Timepoint", "Replicate") %>% 
-                         subset(Replicate != "N/A") %>% 
-                         rename(Sample = "Column Name") %>% 
-                         filter(Sample %in% colnames(filtered_data_matrix))
+                        subset(Replicate != "N/A") %>% 
+                          filter("Column Name" %in% colnames(filtered_data_matrix))
+  #colnames(metadata)["Column Name"] <- "Sample"
+  # 
+  # #tibble of column metadata
+  # metadata <- as_tibble(metadata)
+  # # Specify reference levels for Timepoint and Cell Type
+  # metadata$Timepoint <- factor(metadata$Timepoint, levels = factor_level)
+  # 
+  # #store counts matrix and sample df in a SummarizedExperiments object
+  # se <- SummarizedExperiment(assays = list(counts = filtered_data_matrix), #subsetted counts matrix
+  #                            colData = metadata) #store your sample dataframe as colData
+  # ddsSE <- DESeqDataSet(se, design = ~Timepoint)
+  # 
+  # #results from DESeq2 as df
+  # dds <- DESeq(ddsSE)
+  # dds_results <- results(dds)
+  # dds_results <- as.data.frame(dds_results)
+  # dds_results <- tibble::rownames_to_column(dds_results, "Genes")
+
   
-  #tibble of column metadata
-  metadata <- as_tibble(metadata)
-  # Specify reference levels for Timepoint and Cell Type
-  metadata$Timepoint <- factor(metadata$Timepoint, levels = factor_level)
- 
-  #store counts matrix and sample df in a SummarizedExperiments object
-  se <- SummarizedExperiment(assays = list(counts = filtered_data_matrix), #subsetted counts matrix
-                             colData = metadata) #store your sample dataframe as colData
-  ddsSE <- DESeqDataSet(se, design = ~Timepoint)
-  
-  #results from DESeq2 as df
-  dds <- DESeq(ddsSE)
-  dds_results <- results(dds)
-  dds_results <- as.data.frame(dds_results)
-  dds_results <- tibble::rownames_to_column(dds_results, "Genes") 
   
   # dds <- DESeqDataSetFromMatrix(countData= filtered_data_matrix, 
   #                               colData=metadata, 
@@ -303,14 +307,20 @@ diff_eq <- function(filtered_data, metadata, cell_stage){
   # dds <- DESeq(dds)
   # results <- results(dds)
   
-  return(dds_results)
+  return(metadata)
 }
-
-#' Tab with sortable table displaying differential expression results
-#' Optional: enable gene name search functionality to filter rows of table
-
 #' Tab with content similar to that described in [Assignment 7] (R shiny App)
-
+volcano_plot <-function(dataf, x_name, y_name, slider, color1, color2) {
+    
+    slider <- 1 * 10**slider #calculate slider to fit chart
+    
+    plot_v <- ggplot(data = dataf) + #load data
+      geom_point(aes(x = x_name, y = -log10(y_name), col = y_name < slider)) #+ #get data columns and color based on if statement 
+     # scale_colour_manual(name = paste(y_name, '>', slider), values = setNames(c(color2,color1),c(T, F))) + #set colors and name
+     # theme(legend.position="bottom") #change legend position
+    
+    return(plot_v)
+  }
 
 #' Function that takes the DESeq2 results dataframe, converts it to a tibble and
 #' adds a column to denote plotting status in volcano plot. Column should denote
