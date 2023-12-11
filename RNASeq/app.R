@@ -109,44 +109,44 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"),
                              mainPanel(
                                tabsetPanel(
                                  tabPanel("Barplot of Top Pathways", 
-                                          sidebarLayout(
-                                            sidebarPanel(
-                                              HTML("A barplot of fgsea for top patways will be plotted <br>"),
-                                              sliderInput(inputId =  "number_to_plot", "Select the number of top pathways to plot by adjusted p-value", min = 1, max = 1000, value = 10)
-                                            )
+                                        sidebarLayout(
+                                          sidebarPanel(
+                                            HTML("A barplot of fgsea for top patways will be plotted"),
+                                            sliderInput(inputId =  "number_to_plot", "Select the number of top pathways to plot by adjusted p-value", min = 1, max = 1000, value = 10)
                                           ),
                                           mainPanel(
-                                          plotOutput("barplot_plot"))
-                                          ),
-                                 tabPanel("DataTable of FGSEA Results", 
+                                            plotOutput("barplot_plot")
+                                          )
+                                        )
+                                  ),
+                                 tabPanel("DataTable of FGSEA Results",
                                           sidebarLayout(
                                             sidebarPanel(
-                                              HTML("A barplot of fgsea for top patways will be plotted <br>"),
                                               sliderInput(inputId =  "filter_by_adjp", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .05),
                                               radioButtons(inputId =  "NES_type", "Select all, positive or negative NES pathways",
                                                            choices = c("positive", "negative", "all"), selected = 'all'),
                                               downloadButton("download_fgsea_result", "Download")
-                                            )
-                                          ),
+                                            ),
                                           mainPanel(
-                                            dataTableOutput("fgsea_table"))
+                                            dataTableOutput("fgsea_table")
+                                            )
+                                          )
                                  ),
-                                 tabPanel("Barplot of Top Pathways", 
+                                 tabPanel("Scatterplot of NES",
                                           sidebarLayout(
                                             sidebarPanel(
-                                              HTML("A barplot of fgsea for top patways will be plotted <br>"),
-                                              sliderInput(inputId =  "filter_by_adjp", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .05),
-                                            )
-                                          ),
+                                              sliderInput(inputId =  "filter_by_adjp", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .05)
+                                            ),
                                           mainPanel(
-                                            plotOutput("Scatterplot_NES"))
-                                 ),
+                                            plotOutput("Scatterplot_NES")
+                                            )
+                                 )
                                )
                              )
-                             
                            )
-                  )
-  )
+                           )
+                   )
+                )
 
 )
 # Define server logic required to draw a histogram

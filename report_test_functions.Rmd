@@ -61,5 +61,4 @@ FGSEA
 pathway_lst <- fgsea_lst(diffeq_data, "mouse_symbols.gmt")
 print(pathway_lst)
 write_csv(pathway_lst, "fgsea_results")
-
 ```
