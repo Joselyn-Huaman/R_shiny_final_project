@@ -101,7 +101,51 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"),
                              )
                            )
                   ),
-                  tabPanel("Unsure")
+                  tabPanel("Gene Set Ennrichment Analysis",
+                           sidebarLayout(
+                             sidebarPanel(
+                               fileInput("FGSEA_file", "Choose a csv file", accept = '.csv')
+                             ),
+                             mainPanel(
+                               tabsetPanel(
+                                 tabPanel("Barplot of Top Pathways", 
+                                          sidebarLayout(
+                                            sidebarPanel(
+                                              HTML("A barplot of fgsea for top patways will be plotted <br>"),
+                                              sliderInput(inputId =  "number_to_plot", "Select the number of top pathways to plot by adjusted p-value", min = 1, max = 1000, value = 10)
+                                            )
+                                          ),
+                                          mainPanel(
+                                          plotOutput("barplot_plot"))
+                                          ),
+                                 tabPanel("DataTable of FGSEA Results", 
+                                          sidebarLayout(
+                                            sidebarPanel(
+                                              HTML("A barplot of fgsea for top patways will be plotted <br>"),
+                                              sliderInput(inputId =  "filter_by_adjp", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .05),
+                                              radioButtons(inputId =  "NES_type", "Select all, positive or negative NES pathways",
+                                                           choices = c("positive", "negative", "all"), selected = 'all'),
+                                              downloadButton("download_fgsea_result", "Download")
+                                            )
+                                          ),
+                                          mainPanel(
+                                            dataTableOutput("fgsea_table"))
+                                 ),
+                                 tabPanel("Barplot of Top Pathways", 
+                                          sidebarLayout(
+                                            sidebarPanel(
+                                              HTML("A barplot of fgsea for top patways will be plotted <br>"),
+                                              sliderInput(inputId =  "filter_by_adjp", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .05),
+                                            )
+                                          ),
+                                          mainPanel(
+                                            plotOutput("Scatterplot_NES"))
+                                 ),
+                               )
+                             )
+                             
+                           )
+                  )
   )
 
 )
@@ -405,6 +449,13 @@ server <- function(input, output, session) {
     
     return(plot_v)
   }
+
+  #' Tab 4: FGSEA
+  #' Barplot of fgsea NES for top pathways selected by slider
+  #' Filtered data table displaying the FGSEA results
+  #' Scatter plot of NES on x-axis and -log10 adjusted p-value on y-axis, with gene sets below threshold in grey color
+
+
 
   # Render objects for Sample tab
   output$Summary_table <- renderTable({column_summary(load_data())})
