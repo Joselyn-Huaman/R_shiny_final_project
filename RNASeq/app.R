@@ -25,6 +25,7 @@ options(shiny.maxRequestSize = 30 * 1024^2)  # Set to 30 MB
 # Define UI for application that draws a histogram
 ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"), 
                 titlePanel("BF591: Analysis of RNA-Seq Data"), 
+                HTML("<h6>Author: Joselyn Huaman Argandona</h6>"),
                 tabsetPanel(
                   tabPanel("Samples", 
                            sidebarLayout(
@@ -104,27 +105,23 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"),
                   tabPanel("Gene Set Ennrichment Analysis",
                            sidebarLayout(
                              sidebarPanel(
-                               fileInput("FGSEA_file", "Choose a csv file", accept = '.csv')
+                               fileInput("FGSEA_file", "Choose a txt file", accept = '.txt')
                              ),
                              mainPanel(
                                tabsetPanel(
                                  tabPanel("Barplot of Top Pathways", 
-                                        sidebarLayout(
-                                          sidebarPanel(
-                                            HTML("A barplot of fgsea for top patways will be plotted"),
-                                            sliderInput(inputId =  "number_to_plot", "Adjust maxiumum included adjusted p-value", min = 1, max = 1000, value = 10)
-                                          ),
-                                          mainPanel(
-                                            plotOutput("barplot_plot")
-                                          )
-                                        )
-                                  ),
+                                          HTML("A barplot of fgsea for top patways will be plotted"),
+                                          fluidRow(
+                                            sliderInput(inputId =  "filter_by_adjp_3", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .01)
+                                          ), 
+                                          plotOutput("barplot_fgsea")
+                                        , width = "100%", height =  "1000px"),
                                  tabPanel("DataTable of FGSEA Results",
                                           sidebarLayout(
                                             sidebarPanel(
                                               sliderInput(inputId =  "filter_by_adjp_1", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .01),
                                               radioButtons(inputId =  "NES_type", "Select all, positive or negative NES pathways",
-                                                           choices = c("positive", "negative", "both"), selected = 'both'),
+                                                           choices = c("positive", "negative", "both"), selected = 'positive'),
                                               downloadButton("download_fgsea_result", "Download")
                                             ),
                                           mainPanel(
@@ -464,28 +461,43 @@ server <- function(input, output, session) {
     #require an input file
     req(input$FGSEA_file)
     # read the file
-    input_file <- read_csv(file = input$FGSEA_file$datapath) #results of the file upload are nested
-    
+    input_file <- read_delim(file = input$FGSEA_file$datapath, delim = ",") #results of the file upload are nested
+  
     return(input_file)
   })
   #' Barplot of fgsea NES for top pathways selected by slider
+  barplot_fgsea <- function(file, num_paths){
+    
+    #keep rows that have a padj or lower and arrange by NES
+    fgsea_results_top <- file %>% filter(padj < num_paths) %>% arrange(desc(NES))
+    
+    #bar chart
+    stacked_bar <- fgsea_results_top %>% 
+      ggplot(aes(x = reorder(pathway, NES), y = NES)) +
+      geom_col(aes(fill = NES > 0)) +
+      coord_flip() +
+      ggtitle("fgsea results for CP MSigDB genes") +
+      xlab("Normalized Enrichment Score (NES)")
+    
+    return(stacked_bar)
+  }
   #' Filtered data table displaying the FGSEA results
   filter_fgsea_res <- function(file, num_paths, sign){
     
-    #keep rows that have a padj or lower and arrange by NES
-    fgsea_results <- file %>% filter(padj < num_paths)
-    
     if (sign == "positive"){
-      fgsea_results <- fgsea_results %>% filter(NES > 0)
+      file <- file %>% filter(NES > 0)
     }
     else if (sign == "negative"){
-      fgsea_results <- fgsea_results %>% filter(NES < 0)
+      file <- file %>% filter(NES < 0)
     }
     else {
-      fgsea_results <- fgsea_results
+      file <- file
     }
     
-    return(fgsea_results)
+    #keep rows that have a padj or lower and arrange by NES
+    file <- filter(file, padj < num_paths)
+    
+    return(file)
   }
   #' Scatter plot of NES on x-axis and -log10 adjusted p-value on y-axis, with gene sets below threshold in grey color
   scatter_fgsea <- function(file, num_paths){
@@ -499,7 +511,6 @@ server <- function(input, output, session) {
     
     return(scatter)
   }
-
 
   # Render objects for Sample tab
   output$Summary_table <- renderTable({column_summary(load_data())})
@@ -572,11 +583,14 @@ server <- function(input, output, session) {
   })
   
   # Render objects for FGSEA tab
+  output$barplot_fgsea <- renderPlot({
+    req(load_fgsea_data()) 
+    barplot_fgsea(load_fgsea_data(), input$filter_by_adjp_3)
+  }, height = 1500)
+    
   renderFGSEADataTable <- function() {
     req(load_fgsea_data())
-    isolate({ 
-      filter_fgsea_res(load_fgsea_data(), input$filter_by_adjp, input$NES_type)
-    })
+    filter_fgsea_res(load_fgsea_data(), input$filter_by_adjp_1, input$NES_type)
   }
   
   output$fgsea_table <- renderDataTable({renderFGSEADataTable()})
@@ -592,10 +606,8 @@ server <- function(input, output, session) {
   )
   
   output$Scatterplot_NES <- renderPlot({
-    req(load_fgsea_data()) 
-    isolate({
-      scatter_fgsea(load_fgsea_data(), input$filter_by_adjp)
-    })
+      req(load_fgsea_data()) 
+      scatter_fgsea(load_fgsea_data(), input$filter_by_adjp_2)
   })
   
 }

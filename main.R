@@ -364,7 +364,7 @@ fgsea_lst <- function(labeled_results, gmt_file) {
 }
 
 #' Barplot of fgsea NES for top pathways selected by slider
-barplot_fgse <- function(file, num_paths){
+barplot_fgsea <- function(file, num_paths){
   
   fgsea_results <- read_csv(file)
   

@@ -65,10 +65,10 @@ print(pathway_lst)
 
 FGSEA list
 ```{r}
-barplot_f <- barplot_fgse("fgsea_results", .01)
+barplot_f <- barplot_fgsea("fgsea_results", .01)
 print(barplot_f)
 
-f_f <- filter_fgsea_res("fgsea_results", .01, "both")
+f_f <- filter_fgsea_res("fgsea_results", 1, "both")
 print(f_f)
 
 s_f <- scatter_fgsea("fgsea_results", .01)
