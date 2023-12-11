@@ -363,4 +363,61 @@ fgsea_lst <- function(labeled_results, gmt_file) {
   return(fgseaRes)
 }
 
-
+#' Barplot of fgsea NES for top pathways selected by slider
+barplot_fgse <- function(file, num_paths){
+  
+  fgsea_results <- read_csv(file)
+  
+  #keep rows that have a padj or lower and arrange by NES
+  fgsea_results_top <- fgsea_results %>% filter(padj < num_paths) %>% arrange(desc(NES))
+  
+  #select necessary columns 
+  fgsea_results_10 <- fgsea_results_top %>% dplyr::select(pathway,NES)
+  
+  #bar chart
+   stacked_bar <- fgsea_results_10 %>% 
+     ggplot(aes(x = reorder(pathway, NES), y = NES)) +
+     geom_col(aes(fill = NES > 0)) +
+     coord_flip() +
+     ggtitle("fgsea results for CP MSigDB genes") +
+     xlab("Normalized Enrichment Score (NES)")
+  
+  return(stacked_bar)
+}
+#' Filtered data table displaying the FGSEA results
+filter_fgsea_res <- function(file, num_paths, sign){
+  
+  fgsea_results <- read_csv(file)
+  
+  #keep rows that have a padj or lower and arrange by NES
+  fgsea_results <- fgsea_results %>% filter(padj < num_paths)
+  
+  if (sign == "positive"){
+    fgsea_results <- fgsea_results %>% filter(NES > 0)
+  }
+  else if (sign == "negative"){
+    fgsea_results <- fgsea_results %>% filter(NES < 0)
+  }
+  else {
+    fgsea_results <- fgsea_results
+  }
+  
+  return(fgsea_results)
+}
+#' Scatter plot of NES on x-axis and -log10 adjusted p-value on y-axis, with gene sets below threshold in grey color
+scatter_fgsea <- function(file, num_paths){
+  
+  fgsea_results <- read_csv(file)
+  
+  #keep rows that have a padj or lower and arrange by NES
+  #fgsea_results <- fgsea_results %>% filter(padj < num_paths)
+  
+  scatter <- fgsea_results %>% 
+    ggplot(aes(x = NES, y = -log10(padj))) +
+    geom_point(aes(color = ifelse(-log10(padj) < num_paths, "below_threshold", "above_threshold"))) +
+    scale_color_manual(values = c("below_threshold" = "grey", "above_threshold" = "black")) #+
+  #  ggtitle("fgsea results for CP MSigDB genes") +
+  #  xlab("Normalized Enrichment Score (NES)")
+  
+  return(scatter)
+}
