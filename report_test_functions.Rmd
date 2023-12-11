@@ -52,13 +52,14 @@ Differential Expression
 ```{r}
 diffeq_data <- diff_eq(filtered_data, cs, "ex")
 print(diffeq_data)
-vp <- volcano_plot(diffeq_data, "log2FoldChange", "padj", -50,"#F033A4", "#F7D513")
+vp <- volcano_plot(diffeq_data, "log2FoldChange", "padj", -10,"#F033A4", "#F7D513")
 print(vp)
 ```
 
 FGSEA
 ```{r}
-fgsea_lst <- make_ranked_log2fc(diffeq_data, "mouse_entrez.gmt")
-print(diffeq_data)
+pathway_lst <- fgsea_lst(diffeq_data, "mouse_symbols.gmt")
+print(pathway_lst)
+write_csv(pathway_lst, "fgsea_results")
 
 ```
