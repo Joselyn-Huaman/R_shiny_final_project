@@ -112,7 +112,7 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"),
                                         sidebarLayout(
                                           sidebarPanel(
                                             HTML("A barplot of fgsea for top patways will be plotted"),
-                                            sliderInput(inputId =  "number_to_plot", "Select the number of top pathways to plot by adjusted p-value", min = 1, max = 1000, value = 10)
+                                            sliderInput(inputId =  "number_to_plot", "Adjust maxiumum included adjusted p-value", min = 1, max = 1000, value = 10)
                                           ),
                                           mainPanel(
                                             plotOutput("barplot_plot")
@@ -122,9 +122,9 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"),
                                  tabPanel("DataTable of FGSEA Results",
                                           sidebarLayout(
                                             sidebarPanel(
-                                              sliderInput(inputId =  "filter_by_adjp", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .05),
+                                              sliderInput(inputId =  "filter_by_adjp_1", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .01),
                                               radioButtons(inputId =  "NES_type", "Select all, positive or negative NES pathways",
-                                                           choices = c("positive", "negative", "all"), selected = 'all'),
+                                                           choices = c("positive", "negative", "both"), selected = 'both'),
                                               downloadButton("download_fgsea_result", "Download")
                                             ),
                                           mainPanel(
@@ -135,7 +135,8 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"),
                                  tabPanel("Scatterplot of NES",
                                           sidebarLayout(
                                             sidebarPanel(
-                                              sliderInput(inputId =  "filter_by_adjp", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .05)
+                                              sliderInput(inputId =  "filter_by_adjp_2", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .01),
+                                              
                                             ),
                                           mainPanel(
                                             plotOutput("Scatterplot_NES")
@@ -151,6 +152,12 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"),
 )
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
+  observe({
+    val <- input$filter_by_adjp_1
+    # Control the value, min, max, and step.
+    # Step size is 2 when input value is even; 1 when value is odd.
+    updateSliderInput(session, "filter_by_adjp_2", value = val)
+  })
   
   # Load_Data: Sample information matrix in CSV format
   load_data <- reactive({
@@ -451,10 +458,47 @@ server <- function(input, output, session) {
   }
 
   #' Tab 4: FGSEA
+  # Load_Data: Sample information matrix in CSV format
+  load_fgsea_data <- reactive({
+    
+    #require an input file
+    req(input$FGSEA_file)
+    # read the file
+    input_file <- read_csv(file = input$FGSEA_file$datapath) #results of the file upload are nested
+    
+    return(input_file)
+  })
   #' Barplot of fgsea NES for top pathways selected by slider
   #' Filtered data table displaying the FGSEA results
+  filter_fgsea_res <- function(file, num_paths, sign){
+    
+    #keep rows that have a padj or lower and arrange by NES
+    fgsea_results <- file %>% filter(padj < num_paths)
+    
+    if (sign == "positive"){
+      fgsea_results <- fgsea_results %>% filter(NES > 0)
+    }
+    else if (sign == "negative"){
+      fgsea_results <- fgsea_results %>% filter(NES < 0)
+    }
+    else {
+      fgsea_results <- fgsea_results
+    }
+    
+    return(fgsea_results)
+  }
   #' Scatter plot of NES on x-axis and -log10 adjusted p-value on y-axis, with gene sets below threshold in grey color
-
+  scatter_fgsea <- function(file, num_paths){
+    
+    scatter <- file %>% 
+      ggplot(aes(x = NES, y = -log10(padj))) +
+      geom_point(aes(color = ifelse(-log10(padj) < -log10(num_paths), "below_threshold", "above_threshold"))) +
+      scale_color_manual(values = c("below_threshold" = "grey", "above_threshold" = "pink"), name = paste("padj threshold =", num_paths)) +
+      ggtitle("Scatterplot of NES vs -log10(padj)") +
+      xlab("Normalized Enrichment Score (NES)")
+    
+    return(scatter)
+  }
 
 
   # Render objects for Sample tab
@@ -526,6 +570,34 @@ server <- function(input, output, session) {
   output$volcano_plot <- renderPlot({
     data()$custom_volcano_plot
   })
+  
+  # Render objects for FGSEA tab
+  renderFGSEADataTable <- function() {
+    req(load_fgsea_data())
+    isolate({ 
+      filter_fgsea_res(load_fgsea_data(), input$filter_by_adjp, input$NES_type)
+    })
+  }
+  
+  output$fgsea_table <- renderDataTable({renderFGSEADataTable()})
+  
+  output$download_fgsea_result <- downloadHandler(
+    filename = function() {
+      paste("filtered_fgsea_results_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      filtered_data <- renderFGSEADataTable()
+      write.csv(filtered_data, file, row.names = FALSE)
+    }
+  )
+  
+  output$Scatterplot_NES <- renderPlot({
+    req(load_fgsea_data()) 
+    isolate({
+      scatter_fgsea(load_fgsea_data(), input$filter_by_adjp)
+    })
+  })
+  
 }
 # Run the application
 shinyApp(ui = ui, server = server)
