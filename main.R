@@ -270,35 +270,33 @@ diff_eq <- function(filtered_data, metadata, cell_stage){
   filtered_data_matrix <- as.matrix(filtered_data)
   
   #column metadata - keep only important info
-  metadata <- metadata %>% select("Column Name", "Cell Stage", "Cell Type", "Timepoint", "Replicate") %>% 
+   metadata <- metadata %>% select("Column Name", "Cell Stage", "Cell Type", "Timepoint", "Replicate") %>% 
                         subset(Replicate != "N/A") %>% 
-                          filter("Column Name" %in% colnames(filtered_data_matrix))
-  #colnames(metadata)["Column Name"] <- "Sample"
+                        rename_with(~ "Sample", `Column Name`) %>%
+                          filter(Sample %in% colnames(filtered_data_matrix))
   # 
   # #tibble of column metadata
-  # metadata <- as_tibble(metadata)
+  metadata <- as_tibble(metadata)
   # # Specify reference levels for Timepoint and Cell Type
-  # metadata$Timepoint <- factor(metadata$Timepoint, levels = factor_level)
-  # 
-  # #store counts matrix and sample df in a SummarizedExperiments object
-  # se <- SummarizedExperiment(assays = list(counts = filtered_data_matrix), #subsetted counts matrix
-  #                            colData = metadata) #store your sample dataframe as colData
-  # ddsSE <- DESeqDataSet(se, design = ~Timepoint)
-  # 
-  # #results from DESeq2 as df
-  # dds <- DESeq(ddsSE)
-  # dds_results <- results(dds)
-  # dds_results <- as.data.frame(dds_results)
-  # dds_results <- tibble::rownames_to_column(dds_results, "Genes")
+  metadata$Timepoint <- factor(metadata$Timepoint, levels = factor_level)
 
-  
-  
-  # dds <- DESeqDataSetFromMatrix(countData= filtered_data_matrix, 
-  #                               colData=metadata, 
+  #store counts matrix and sample df in a SummarizedExperiments object
+  se <- SummarizedExperiment(assays = list(counts = filtered_data_matrix), #subsetted counts matrix
+                             colData = metadata) #store your sample dataframe as colData
+  ddsSE <- DESeqDataSet(se, design = ~Timepoint)
+
+  #results from DESeq2 as df
+  dds <- DESeq(ddsSE)
+  dds_results <- results(dds)
+  dds_results <- as.data.frame(dds_results)
+  dds_results <- tibble::rownames_to_column(dds_results, "Genes")
+
+  # dds <- DESeqDataSetFromMatrix(countData= filtered_data_matrix,
+  #                               colData=metadata,
   #                               design= ~Timepoint)
   # # compute normalization factors
   # dds <- estimateSizeFactors(dds)
-  # 
+  #
   # # extract the normalized counts
   # dds <- as_tibble(counts(dds, normalized=TRUE)) %>%
   #   mutate(gene = count_data$gene) %>%
@@ -307,20 +305,46 @@ diff_eq <- function(filtered_data, metadata, cell_stage){
   # dds <- DESeq(dds)
   # results <- results(dds)
   
-  return(metadata)
+  return(dds_results)
 }
 #' Tab with content similar to that described in [Assignment 7] (R shiny App)
 volcano_plot <-function(dataf, x_name, y_name, slider, color1, color2) {
     
+    if (y_name == "padj" || x_name == "padj"){
+    dataf <- dataf[!is.na(dataf$padj), ]
+    }
+  
     slider <- 1 * 10**slider #calculate slider to fit chart
     
     plot_v <- ggplot(data = dataf) + #load data
-      geom_point(aes(x = x_name, y = -log10(y_name), col = y_name < slider)) #+ #get data columns and color based on if statement 
-     # scale_colour_manual(name = paste(y_name, '>', slider), values = setNames(c(color2,color1),c(T, F))) + #set colors and name
-     # theme(legend.position="bottom") #change legend position
+      geom_point(aes(x = .data[[x_name]], y = -log10(.data[[y_name]]), col = .data[[y_name]] < slider)) + #get data columns and color based on if statement 
+      scale_colour_manual(name = paste(y_name, '>', slider), values = setNames(c(color2,color1),c(T, F))) + #set colors and name
+      theme(legend.position="bottom") #change legend position
     
     return(plot_v)
-  }
+}
+
+make_ranked_log2fc <- function(labeled_results, gmt_file) {
+  
+  #first load in the id2gene.txt appropriately
+  #id <- read.table(gmt_file, sep = "\t", quote = "")
+  id <- read_delim(gmt_file, col_names = FALSE, delim = "\t")
+  # colnames(id) <- c('Gene', 'symbols')
+  # 
+  # #add a new column in your labeled results that matches IDs to symbols
+  # labeled_results <- merge(x=labeled_results, y=id, by = "Gene", all.x=TRUE)
+  # 
+  # #log2FC values in descending order and select 2. columns
+  # labeled_results <- labeled_results %>% arrange(desc(log2FoldChange)) %>% #descending order
+  #   drop_na(log2FoldChange) %>%
+  #   dplyr::select(symbols, log2FoldChange)
+  # 
+  # #generate a named vector of symbols and log2FC values 
+  # labeled_results_vector <- deframe(labeled_results)
+  
+  return(id)
+}
+
 
 #' Function that takes the DESeq2 results dataframe, converts it to a tibble and
 #' adds a column to denote plotting status in volcano plot. Column should denote

@@ -50,10 +50,15 @@ print(pca)
 ```
 Differential Expression
 ```{r}
-
-print(colnames(cs))
-diffeq_data <- diff_eq(filtered_data, cs, "vP")
+diffeq_data <- diff_eq(filtered_data, cs, "ex")
 print(diffeq_data)
-#vp <- volcano_plot(diffeq_data, "log2FoldChange", "padj", -50,"#F033A4", "#F7D513")
-#print(vp)
+vp <- volcano_plot(diffeq_data, "log2FoldChange", "padj", -50,"#F033A4", "#F7D513")
+print(vp)
+```
+
+FGSEA
+```{r}
+fgsea_lst <- make_ranked_log2fc(diffeq_data, "mouse_entrez.gmt")
+print(diffeq_data)
+
 ```
