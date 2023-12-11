@@ -409,15 +409,12 @@ scatter_fgsea <- function(file, num_paths){
   
   fgsea_results <- read_csv(file)
   
-  #keep rows that have a padj or lower and arrange by NES
-  #fgsea_results <- fgsea_results %>% filter(padj < num_paths)
-  
   scatter <- fgsea_results %>% 
     ggplot(aes(x = NES, y = -log10(padj))) +
-    geom_point(aes(color = ifelse(-log10(padj) < num_paths, "below_threshold", "above_threshold"))) +
-    scale_color_manual(values = c("below_threshold" = "grey", "above_threshold" = "black")) #+
-  #  ggtitle("fgsea results for CP MSigDB genes") +
-  #  xlab("Normalized Enrichment Score (NES)")
+    geom_point(aes(color = ifelse(-log10(padj) < -log10(num_paths), "below_threshold", "above_threshold"))) +
+    scale_color_manual(values = c("below_threshold" = "grey", "above_threshold" = "pink"), name = paste("padj threshold =", num_paths)) +
+    ggtitle("Scatterplot of NES vs -log10(padj)") +
+    xlab("Normalized Enrichment Score (NES)")
   
   return(scatter)
 }
