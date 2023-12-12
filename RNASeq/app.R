@@ -24,25 +24,21 @@ options(shiny.maxRequestSize = 30 * 1024^2)  # Set to 30 MB
 #profvis({
 # Define UI for application that draws a histogram
 ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"), 
-                titlePanel("BF591: Analysis of RNA-Seq Data"), 
+                titlePanel("Analysis of RNA-Seq Data"), 
                 HTML("<h6>Author: Joselyn Huaman Argandona</h6>"),
                 tabsetPanel(
-                  tabPanel("Samples", 
+                  tabPanel("Sample Counts Exploration", 
                            sidebarLayout(
                              sidebarPanel(
                               fileInput("Count_File", "Choose a txt file", accept = '.txt')
                             ),
                            mainPanel(
                              tabsetPanel(
-                               tabPanel("Summary", tableOutput("Summary_table")),
-                               tabPanel("DataTable", dataTableOutput("DataTable_table")),
-                               tabPanel("Continous",
-                                            HTML("Cell Type Options:<br>"),
-                                            HTML("e = Explanted, dissociated adult cardiomyocytes<br>"),
-                                            HTML("v = In vivo ventricular myocardium<br>"),
-                                            HTML("i = In vitro isolated Cardiomyocytes<br><br>"),
-                                            radioButtons(inputId = "subset_data", label = HTML("<strong>Choose the Cell Type to plot</strong>"), 
-                                                        choices = c("e", "v", "i"), selected = 'e'),
+                               tabPanel("Column Summary of Counts File", tableOutput("Summary_table")),
+                               tabPanel("Counts DataTable", dataTableOutput("DataTable_table")),
+                               tabPanel("Plotting Counts of Continous Variables",
+                                            radioButtons(inputId = "subset_data", label = HTML("Choose the Cell Stage to plot"), 
+                                                        choices = c("Adult CM Exmplant", "In vivo Maturation using ventricular samples", "In vivo Regeneration using ventricular samples",  "In vivo Maturation using iCM samples",  "In vivo Regeneration using iCM samples"), selected = "Adult CM Exmplant"),
                                             plotOutput("Continous_plot"), width = "100%", height =  "1500px")
                              )
                             )
@@ -132,8 +128,7 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"),
                                  tabPanel("Scatterplot of NES",
                                           sidebarLayout(
                                             sidebarPanel(
-                                              sliderInput(inputId =  "filter_by_adjp_2", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .01),
-                                              
+                                              sliderInput(inputId = "filter_by_adjp_2", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .01)
                                             ),
                                           mainPanel(
                                             plotOutput("Scatterplot_NES")
@@ -186,14 +181,6 @@ server <- function(input, output, session) {
     data_num_updated['Mean (sd) or Distinct Values'] <- paste0(round(data_num_updated$Mean,2), ' +/- (', round(data_num_updated$sd,2), ')')
     data_num_updated <- data_num_updated[c('Column Name', 'Mean (sd) or Distinct Values')]
     
-    #Cell Type
-    data_num_updated <- data_num_updated %>% mutate("Cell Type" = case_when(
-      str_starts(`Column Name`, "e") ~ "Explanted, dissociated adult cardiomyocytes",
-      str_starts(`Column Name`, "v") ~ "In vivo ventricular myocardium",
-      str_starts(`Column Name`, "i") ~ "In vitro isolated Cardiomyocytes",
-      TRUE ~ NA_character_
-    ))
-    
     # Timepoint
     data_num_updated <- data_num_updated %>% mutate("Timepoint" = case_when(
       str_starts(`Column Name`, "ex") ~  str_sub(data_num_updated$`Column Name`, 3,-3),
@@ -210,6 +197,7 @@ server <- function(input, output, session) {
     data_num_updated <- data_num_updated %>% mutate("Cell Stage" = case_when(
       str_starts(`Column Name`, "e") ~ "Adult CM Exmplant",
       str_starts(`Column Name`, "vP") ~ "In vivo Maturation using ventricular samples",
+      str_starts(`Column Name`, "vA") ~ "In vivo Maturation using ventricular samples",
       str_starts(`Column Name`, "vD") ~ "In vivo Regeneration using ventricular samples",
       str_starts(`Column Name`, "iP") ~ "In vivo Maturation using iCM samples",
       str_starts(`Column Name`, "iD") ~ "In vivo Regeneration using iCM samples",
@@ -227,7 +215,6 @@ server <- function(input, output, session) {
     colnames(data_cat_updated) <- c('Column Name', 'Mean (sd) or Distinct Values')
     data_cat_updated['Replicate'] <- "N/A"
     data_cat_updated['Timepoint'] <- "N/A"
-    data_cat_updated['Cell Type'] <- "N/A"
     data_cat_updated['Cell Stage'] <- "N/A"
     
     # Row bind character and numeric values
@@ -238,19 +225,34 @@ server <- function(input, output, session) {
     col_type <- rownames_to_column(col_type)
     colnames(col_type) <- c('Column Name','Type')
     
-    updated <- merge(updated, col_type, on = 'Column Name')
-    updated <- updated %>% select('Column Name', 'Mean (sd) or Distinct Values', 'Type', everything()) %>% dplyr::arrange('Timepoint')
+    updated <- merge(updated, col_type, on = 'Column Name') 
+    updated <- updated[order(updated$Timepoint), ]
     
     return(updated)
   }
   #' Tab with histograms, density plots, or violin plots of continuous variables.
   #'    If you want to make it fancy, allow the user to choose which column to plot and another column to group by!
-  plot_continous_var <- function(data, cell_type_choosen){
+  plot_continous_var <- function(data, cell_stage_choosen){
     
+    if (cell_stage_choosen == "Adult CM Exmplant"){ 
+      data_sub <- dplyr::select(data, starts_with("e")) } 
+    else if (cell_stage_choosen == "In vivo Maturation using ventricular samples"){ 
+      data_1 <- dplyr::select(data, starts_with("vP")) 
+      data_2 <- dplyr::select(data, starts_with("vA")) 
+      data_sub <- cbind(data_1, data_2) } 
+    else if (cell_stage_choosen == "In vivo Regeneration using ventricular samples"){ 
+      data_sub <- dplyr::select(data, starts_with("vD")) } 
+    else if (cell_stage_choosen == "In vivo Maturation using iCM samples"){ 
+      data_sub <- dplyr::select(data, starts_with("iP")) } 
+    else if (cell_stage_choosen == "In vivo Regeneration using iCM samples"){ 
+      data_sub <- dplyr::select(data, starts_with("iD")) }
+    else {
+      stop("Invalid value for cell_stage_choosen.")
+    }
     # subset data
-    data <- data %>% select(starts_with(cell_type_choosen)) 
+    #data <- data %>% select(starts_with(cell_type_choosen)) 
     # format data
-    plot_df  <- pivot_longer(data, cols = everything(), values_to = "Count", names_to = "Sample") #keep columns that start with
+    plot_df  <- pivot_longer(data_sub, cols = everything(), values_to = "Count", names_to = "Sample") #keep columns that start with
     # timepoint
     plot_df <- plot_df %>% mutate("Timepoint" = case_when(
       str_starts(Sample, "e") ~  str_sub(plot_df$Sample, 1,-3),
@@ -264,7 +266,8 @@ server <- function(input, output, session) {
       geom_violin(adjust=3, alpha=.4, binwidth = 50) +
       theme_ipsum() +
       geom_boxplot(width=0.1) +     
-      theme(legend.position="bottom")
+      theme(legend.position="bottom") +
+      ggtitle(paste("Counts Distribution of cells in", cell_stage_choosen))
     
     return(h_plt)
   } 
