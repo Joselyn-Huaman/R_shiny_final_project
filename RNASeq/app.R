@@ -51,10 +51,10 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "pulse"),
                            sidebarLayout(
                              sidebarPanel(
                                fileInput("Normalized_Count_File", "Choose a (normalized) txt file", accept = '.txt'),
-                               HTML("All analysis on the Counts tab takes normalized filtered data based on the sliders as an input"),
+                               HTML("Analysis on the Counts tab takes filtered data based on the below sliders <br>"),
                                sliderInput(inputId =  "percentile_variance", label = HTML("Include genes that have at least <em>X</em> percentile of variance"), min = 0, max = 1, value = .75),
                                sliderInput(inputId =  "min_non_zero", label = HTML("Include genes that have at least <em>X</em> samples that are non-zero"), min = 0, max = 36, value = 3),
-                               actionButton(inputId = 'filter_btn', 'Add Filter', icon = icon('plus'), class = 'btn-block')
+                               downloadButton("download_filter_count", "Download")
                           ),
                           mainPanel(
                             tabsetPanel(
@@ -188,6 +188,7 @@ server <- function(input, output, session) {
     return(input_file)
   })
   
+  # Tab 1: Sample
   # Tab with a summary of the table that includes a summary of the type and values in each column, 
   # e.g.: Number of rows: X Number of columns: Y
   column_summary <- function(data){
@@ -298,6 +299,16 @@ server <- function(input, output, session) {
     return(h_plt)
   } 
   
+  # Tab 2: Counts
+  load_data_count <- reactive({
+    #require an input file
+    req(input$Normalized_Count_File)
+    # read the file
+    input_file <- read_delim(file = input$Normalized_Count_File$datapath, delim = "\t") #results of the file upload are nested
+    
+    return(input_file)
+  })
+  
   filtered_data <- function(data, percentile_variance, min_non_zero){
     
     #'Calculate Variance per row
@@ -321,8 +332,8 @@ server <- function(input, output, session) {
   #' number of samples, total number of genes, number and % of genes passing current filter, number and % of genes not passing current filter
   filtered_summary_table <- function(data, f_data){
     
-    num_sample <- ncol(data) -2-3-3
-    total_num_genes <- nrow(data)
+    num_sample <- if (!is.null(data)) ncol(data) - 2 - 3 - 3 else 0
+    total_num_genes <- if (!is.null(data)) nrow(data) else 0
     num_genes_pass <- nrow(f_data)
     perc_genes_pass <- round(num_genes_pass/total_num_genes, 4)*100
     num_genes_fail <- total_num_genes-num_genes_pass
@@ -341,17 +352,17 @@ server <- function(input, output, session) {
 
     #' median count vs variance (consider log scale for plot)
     median_v_var <- ggplot() + 
-      geom_point(data = data, aes(x=-log10(Median_Count), y=-log10(Variance), color = "Fail_Filter"), alpha = 0.5) +
-      geom_point(data = f_data, aes(x=-log10(Median_Count), y=-log10(Variance), color = "Pass_Filter"), alpha = 0.5) +
-      scale_color_manual(values = c("Fail_Filter" = "lightblue", "Pass_Filter" = "darkblue")) +
+      geom_point(data = data, aes(x=rank(Median_Count), y= Variance, color = "Fail_Filter"), alpha = 0.5) +
+      geom_point(data = f_data, aes(x=rank(Median_Count), y= Variance, color = "Pass_Filter"), alpha = 0.5) +
+      scale_color_manual(values = c("Fail_Filter" = "#00BFC4", "Pass_Filter" = "#7CAE00")) +
       ggtitle('Median count vs variance') +
       coord_cartesian(clip = 'off')
     
     #' median count vs number of zeros
     median_v_zero <- ggplot() + 
-      geom_point(data = data, aes(x=-log10(Median_Count), y=Number_of_Zeros, color = "Fail_Filter"), alpha = 0.5) +
-      geom_point(data = f_data, aes(x=-log10(Median_Count), y=Number_of_Zeros, color = "Pass_Filter"), alpha = 0.5) +
-      scale_color_manual(values = c("Fail_Filter" = "lightblue", "Pass_Filter" = "darkblue")) +
+      geom_point(data = data, aes(x=rank(Median_Count), y= Number_of_Zeros, color = "Fail_Filter"), alpha = 0.5) +
+      geom_point(data = f_data, aes(x=rank(Median_Count), y= Number_of_Zeros, color = "Pass_Filter"), alpha = 0.5) +
+      scale_color_manual(values = c("Fail_Filter" = "#00BFC4", "Pass_Filter" = "#7CAE00")) +
       ggtitle('Median count vs number of zeros') +
       coord_cartesian(clip = 'off')
     
@@ -409,7 +420,7 @@ server <- function(input, output, session) {
     #'allow the user to select which principal components to plot in a scatter plot (e.g. PC1 vs PC2)
     scatterplot_PCA <- pca_results_subset %>%
                         ggplot(aes(x = .data[[first_column_name]], y = .data[[second_column_name]])) +
-                        geom_point() +
+                        geom_point(color = "#3C0E8C") +
                         ggtitle('Principal Component Scatterplot') +
                         xlab(paste0('PC',PC_x, ": ", var_exp_tib[PC_x,], '% Variance')) +
                         ylab(paste0('PC', PC_y, ": ", var_exp_tib[PC_y,], '% Variance'))
@@ -417,7 +428,7 @@ server <- function(input, output, session) {
     return(scatterplot_PCA)
   }
   
-  #' Differential Expression
+  #' Tab 3: Differential Expression
   #' Tab with sortable table displaying differential expression results
   diff_eq <- function(filtered_data, metadata, cell_stage){
     
@@ -447,7 +458,7 @@ server <- function(input, output, session) {
     filtered_data_matrix <- as.matrix(filtered_data)
     
     #column metadata - keep only important info
-    metadata <- metadata %>% select("Column Name", "Cell Stage", "Cell Type", "Timepoint", "Replicate") %>% 
+    metadata <- metadata %>% dplyr::select("Column Name", "Cell Stage", "Timepoint", "Replicate") %>% 
       subset(Replicate != "N/A") %>% 
       rename(Sample = "Column Name") %>% 
       filter(Sample %in% colnames(filtered_data_matrix))
@@ -549,103 +560,76 @@ server <- function(input, output, session) {
     return(scatter)
   }
 
+  
   # Render objects for Sample tab
   output$Summary_table <- renderDataTable({column_summary(load_data())})
-  
   output$DataTable_table <- renderDataTable({load_data()})
-  
   output$Continous_plot <- renderPlot({
     req(input$subset_data)
-    isolate({plot_continous_var(load_data(), input$subset_data)})
+    plot_continous_var(load_data(), input$subset_data)
   }, height = 1500)
   
   # Render objects for Counts and DE tab
   # Function to process data based on file input and filtering parameters
   # Define reactive values to store filter values
-  
-  filterValues <- reactiveVal(list(
-    percentile_variance = 0.75,
-    min_non_zero = 3,
-    filtered_data = NULL
-  ))
-  
-  # Update filter values and filtered data when sliders are moved
-  observe({
-    filterValues(list(
-      percentile_variance = input$percentile_variance,
-      min_non_zero = input$min_non_zero,
-      filtered_data = filtered_data(load_data(), input$percentile_variance, input$min_non_zero)
-    ))
-  })
-  
-  # Reactive expression for different plots and tables
-  data <- reactive({
-    req(filterValues()$filtered_data)
-    
-    diff_eq_table <- diff_eq(filterValues()$filtered_data[[2]], column_summary(load_data()), input$cell_stage)
-    
-    list(
-      summary_table = filtered_summary_table(filterValues()$filtered_data[[1]], filterValues()$filtered_data[[2]]),
-      diagnostic_plot = diagnostic_scatter_plots(filterValues()$filtered_data[[1]], filterValues()$filtered_data[[2]]),
-      heatmap_plot = clustered_heatmap(filterValues()$filtered_data[[2]]),
-      pca_plot = PCA_plot(filterValues()$filtered_data[[2]], input$First_PC, input$Second_PC),
-      diff_eq_table_1 = diff_eq_table,
-      custom_volcano_plot = volcano_plot(diff_eq_table_1, input$x_axis, input$y_axis, input$padj_color, input$color_base, input$color_highlight)
-    )
-  })
+
   
   # Render plots based on reactive expression
-  output$Filtered_Summary_table <- renderTable({
-      data()$summary_table
+  filtered_data_react <- reactive({
+    new_data <- filtered_data(load_data_count(), input$percentile_variance, input$min_non_zero)
+    return(new_data)
   })
   
+  output$download_filter_count <- downloadHandler(
+    filename = function() {
+      paste("filtered_count_results_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      filtered_data <- filtered_data_react()[[2]]
+      write.csv(filtered_data, file, row.names = FALSE)})
+  
+  output$Filtered_Summary_table <- renderTable({
+    filtered_summary_table(filtered_data_react()[[1]], filtered_data_react()[[2]])
+    })
+  
   output$Diagnostic_plot <- renderPlot({
-    data()$diagnostic_plot
+    diagnostic_scatter_plots(filtered_data_react()[[1]], filtered_data_react()[[2]])
   })
 
   output$Heatmap_plot <- renderPlot({
-    data()$heatmap_plot
+    clustered_heatmap(filtered_data_react()[[2]])
   }, height = 400)
 
   output$PCA_plot <- renderPlot({
-    data()$pca_plot
+    PCA_plot(filtered_data_react()[[2]], input$First_PC, input$Second_PC)
   })
-
-  output$Diff_eq_table <- renderDataTable({
-    data()$diff_eq_table
-  })
-
-  output$volcano_plot <- renderPlot({
-    data()$custom_volcano_plot
-  })
+  # 
+  # output$Diff_eq_table <- renderDataTable({
+  #   data()$diff_eq_table
+  # })
+  # 
+  # output$volcano_plot <- renderPlot({
+  #   data()$custom_volcano_plot
+  # })
   
   # Render objects for FGSEA tab
   output$barplot_fgsea <- renderPlot({
     req(load_fgsea_data()) 
-    barplot_fgsea(load_fgsea_data(), input$filter_by_adjp_3)
-  }, height = 1500)
-    
+    barplot_fgsea(load_fgsea_data(), input$filter_by_adjp_3)}, height = 1500)
   renderFGSEADataTable <- function() {
     req(load_fgsea_data())
-    filter_fgsea_res(load_fgsea_data(), input$filter_by_adjp_1, input$NES_type)
-  }
-  
+    filter_fgsea_res(load_fgsea_data(), input$filter_by_adjp_1, input$NES_type)}
   output$fgsea_table <- renderDataTable({renderFGSEADataTable()})
-  
   output$download_fgsea_result <- downloadHandler(
     filename = function() {
       paste("filtered_fgsea_results_", Sys.Date(), ".csv", sep = "")
     },
     content = function(file) {
       filtered_data <- renderFGSEADataTable()
-      write.csv(filtered_data, file, row.names = FALSE)
-    }
-  )
-  
+      write.csv(filtered_data, file, row.names = FALSE)})
   output$Scatterplot_NES <- renderPlot({
       req(load_fgsea_data()) 
-      scatter_fgsea(load_fgsea_data(), input$filter_by_adjp_2)
-  })
+      scatter_fgsea(load_fgsea_data(), input$filter_by_adjp_2)})
   
 }
 # Run the application
