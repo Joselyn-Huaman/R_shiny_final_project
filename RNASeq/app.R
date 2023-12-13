@@ -23,9 +23,10 @@ options(shiny.maxRequestSize = 30 * 1024^2)  # Set to 30 MB
 
 #profvis({
 # Define UI for application that draws a histogram
-ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"), 
-                titlePanel("Analysis of RNA-Seq Data"), 
-                HTML("<h6>Author: Joselyn Huaman Argandona</h6>"),
+ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "pulse"), 
+                HTML("<h1>Analysis of RNA-Seq Data</h1>"), 
+                HTML("<h5><em>Transcriptional Reversion of Cardiac Myocyte Fate During Mammalian Cardiac Regeneration</em></h5>"),
+                HTML("Joselyn Huaman Argandona"),
                 tabsetPanel(
                   tabPanel("Sample Counts Exploration", 
                            sidebarLayout(
@@ -34,11 +35,13 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"),
                             ),
                            mainPanel(
                              tabsetPanel(
-                               tabPanel("Column Summary of Counts File", tableOutput("Summary_table")),
+                               tabPanel("Column Summary of Counts File", dataTableOutput("Summary_table")),
                                tabPanel("Counts DataTable", dataTableOutput("DataTable_table")),
                                tabPanel("Plotting Counts of Continous Variables",
+                                        wellPanel(
                                             radioButtons(inputId = "subset_data", label = HTML("Choose the Cell Stage to plot"), 
-                                                        choices = c("Adult CM Exmplant", "In vivo Maturation using ventricular samples", "In vivo Regeneration using ventricular samples",  "In vivo Maturation using iCM samples",  "In vivo Regeneration using iCM samples"), selected = "Adult CM Exmplant"),
+                                                        choices = c("Adult CM Exmplant", "In vivo Maturation using ventricular samples", "In vivo Regeneration using ventricular samples",  "In vivo Maturation using iCM samples",  "In vivo Regeneration using iCM samples"), selected = "Adult CM Exmplant")
+                                        ),
                                             plotOutput("Continous_plot"), width = "100%", height =  "1500px")
                              )
                             )
@@ -59,11 +62,11 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"),
                               tabPanel("Diagnostic ScatterPlot", plotOutput("Diagnostic_plot")),
                               tabPanel("Heatmap", shiny::div(style = "overflow-x: auto; overflow-y: auto; white-space: nowrap;", plotOutput("Heatmap_plot", height = '400px'))),
                               tabPanel("PCA",
-                                       HTML("<strong>Choose Principal Components to Plot</strong> <br>"),
-                                       fluidRow(
-                                         column(6, numericInput("First_PC", "Select principal components to plot on the x-axis", 1, min = 1, max = 40)),
-                                         column(6, numericInput("Second_PC", "Select principal components to plot on the y-axis", 2, min = 1, max = 40))
-                                       ), 
+                                       wellPanel(
+                                         fluidRow(
+                                           column(6, numericInput("First_PC", "Select principal components to plot on the x-axis", 1, min = 1, max = 40)),
+                                           column(6, numericInput("Second_PC", "Select principal components to plot on the y-axis", 2, min = 1, max = 40))
+                                       )), 
                                        plotOutput("PCA_plot"))
                             )
                           )
@@ -106,18 +109,19 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"),
                              mainPanel(
                                tabsetPanel(
                                  tabPanel("Barplot of Top Pathways", 
-                                          HTML("A barplot of fgsea for top patways will be plotted"),
-                                          fluidRow(
-                                            sliderInput(inputId =  "filter_by_adjp_3", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .01)
+                                          sidebarPanel(
+                                            sliderInput(inputId =  "filter_by_adjp_3", "Adjust maxiumum included adjusted p-value (10^X)", min = -26, max = 0, value = -10)
                                           ), 
-                                          plotOutput("barplot_fgsea")
+                                          
+                                          mainPanel(
+                                          plotOutput("barplot_fgsea"))
                                         , width = "100%", height =  "1000px"),
                                  tabPanel("DataTable of FGSEA Results",
                                           sidebarLayout(
                                             sidebarPanel(
-                                              sliderInput(inputId =  "filter_by_adjp_1", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .01),
-                                              radioButtons(inputId =  "NES_type", "Select all, positive or negative NES pathways",
-                                                           choices = c("positive", "negative", "both"), selected = 'positive'),
+                                              sliderInput(inputId =  "filter_by_adjp_1", "Adjust maxiumum included adjusted p-value (10^X)", min = -26, max = 0, value = -10),
+                                              radioButtons(inputId =  "NES_type", "Select type of NES pathways",
+                                                           choices = c("positive", "negative", "both"), selected = 'both'),
                                               downloadButton("download_fgsea_result", "Download")
                                             ),
                                           mainPanel(
@@ -125,10 +129,10 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"),
                                             )
                                           )
                                  ),
-                                 tabPanel("Scatterplot of NES",
+                                 tabPanel("Scatterplot of NES vs padj",
                                           sidebarLayout(
                                             sidebarPanel(
-                                              sliderInput(inputId = "filter_by_adjp_2", "Adjust maxiumum included adjusted p-value", min = .00001, max = 1, value = .01)
+                                              sliderInput(inputId = "filter_by_adjp_2", "Adjust maxiumum included adjusted p-value (10^X)", min = -26, max = 0, value = -10)
                                             ),
                                           mainPanel(
                                             plotOutput("Scatterplot_NES")
@@ -144,11 +148,33 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "solar"),
 )
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
+  
+  #Move slider for FGSEA
+  observe({
+    val <- input$filter_by_adjp_3
+    # Control the value, min, max, and step.
+    # Step size is 2 when input value is even; 1 when value is odd.
+    updateSliderInput(session, "filter_by_adjp_2", value = val)
+    updateSliderInput(session, "filter_by_adjp_1", value = val)
+    
+  })
+  
+  observe({
+    val <- input$filter_by_adjp_2
+    # Control the value, min, max, and step.
+    # Step size is 2 when input value is even; 1 when value is odd.
+    updateSliderInput(session, "filter_by_adjp_1", value = val)
+    updateSliderInput(session, "filter_by_adjp_3", value = val)
+    
+  })
+  
   observe({
     val <- input$filter_by_adjp_1
     # Control the value, min, max, and step.
     # Step size is 2 when input value is even; 1 when value is odd.
     updateSliderInput(session, "filter_by_adjp_2", value = val)
+    updateSliderInput(session, "filter_by_adjp_3", value = val)
+    
   })
   
   # Load_Data: Sample information matrix in CSV format
@@ -471,16 +497,20 @@ server <- function(input, output, session) {
   #' Barplot of fgsea NES for top pathways selected by slider
   barplot_fgsea <- function(file, num_paths){
     
+    num_paths <- 10**num_paths
+    
     #keep rows that have a padj or lower and arrange by NES
     fgsea_results_top <- file %>% filter(padj < num_paths) %>% arrange(desc(NES))
     
-    #bar chart
     stacked_bar <- fgsea_results_top %>% 
-      ggplot(aes(x = reorder(pathway, NES), y = NES)) +
-      geom_col(aes(fill = NES > 0)) +
+      mutate(fill_color = ifelse(NES > 0, "positive NES", "negative NES")) %>%
+      ggplot(aes(x = reorder(pathway, NES), y = NES, fill = fill_color)) +
+      geom_col() +
+      scale_fill_manual(values = c("positive NES" = "#7CAE00", "negative NES" = "#00BFC4")) +
       coord_flip() +
       ggtitle("fgsea results for CP MSigDB genes") +
-      xlab("Normalized Enrichment Score (NES)")
+      ylab("Normalized Enrichment Score (NES)") +
+      xlab("Pathway")
     
     return(stacked_bar)
   }
@@ -497,6 +527,8 @@ server <- function(input, output, session) {
       file <- file
     }
     
+    num_paths <- 10**num_paths
+    
     #keep rows that have a padj or lower and arrange by NES
     file <- filter(file, padj < num_paths)
     
@@ -505,10 +537,12 @@ server <- function(input, output, session) {
   #' Scatter plot of NES on x-axis and -log10 adjusted p-value on y-axis, with gene sets below threshold in grey color
   scatter_fgsea <- function(file, num_paths){
     
+    num_paths <- 10**num_paths
+    
     scatter <- file %>% 
       ggplot(aes(x = NES, y = -log10(padj))) +
       geom_point(aes(color = ifelse(-log10(padj) < -log10(num_paths), "below_threshold", "above_threshold"))) +
-      scale_color_manual(values = c("below_threshold" = "grey", "above_threshold" = "pink"), name = paste("padj threshold =", num_paths)) +
+      scale_color_manual(values = c("below_threshold" = "grey", "above_threshold" = "#3C0E8C"), name = paste("padj threshold =", num_paths)) +
       ggtitle("Scatterplot of NES vs -log10(padj)") +
       xlab("Normalized Enrichment Score (NES)")
     
@@ -516,7 +550,7 @@ server <- function(input, output, session) {
   }
 
   # Render objects for Sample tab
-  output$Summary_table <- renderTable({column_summary(load_data())})
+  output$Summary_table <- renderDataTable({column_summary(load_data())})
   
   output$DataTable_table <- renderDataTable({load_data()})
   
