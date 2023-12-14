@@ -50,7 +50,7 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "pulse"),
                   tabPanel("Counts",
                            sidebarLayout(
                              sidebarPanel(
-                               fileInput("Normalized_Count_File", "Choose a (normalized) txt file", accept = '.txt'),
+                               fileInput("Normalized_Count_File", "Choose a txt file", accept = '.txt'),
                                HTML("Analysis on the Counts tab takes filtered data based on the below sliders <br>"),
                                sliderInput(inputId =  "percentile_variance", label = HTML("Include genes that have at least <em>X</em> percentile of variance"), min = 0, max = 1, value = .75),
                                sliderInput(inputId =  "min_non_zero", label = HTML("Include genes that have at least <em>X</em> samples that are non-zero"), min = 0, max = 36, value = 3),
@@ -59,8 +59,10 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "pulse"),
                           mainPanel(
                             tabsetPanel(
                               tabPanel("Filtered Summary", tableOutput("Filtered_Summary_table")),
-                              tabPanel("Diagnostic ScatterPlot", plotOutput("Diagnostic_plot")),
-                              tabPanel("Heatmap", shiny::div(style = "overflow-x: auto; overflow-y: auto; white-space: nowrap;", plotOutput("Heatmap_plot", height = '400px'))),
+                              tabPanel("Diagnostic ScatterPlot", 
+                                       HTML("Rank is in ascending order <br>"),
+                                       plotOutput("Diagnostic_plot")),
+                              tabPanel("Heatmap", plotOutput("Heatmap_plot", height = '400px')),
                               tabPanel("PCA",
                                        wellPanel(
                                          fluidRow(
@@ -74,29 +76,32 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "pulse"),
                   ),
                   tabPanel("DE",
                            mainPanel(
-                             HTML("<strong>The normalized count data has undergone different expression analysis via DESeq2</strong> <br> <br>"),
-                             radioButtons(inputId = "cell_stage", label = HTML("<strong>Choose the Cell Stage to subset</strong>"), 
-                                         choices = c("ex", "vP", "vD", "iP", "iD"), selected = 'vP'),
-                             tabsetPanel(
-                               tabPanel("Differential Expression Results", dataTableOutput("Diff_eq_table")),
-                               tabPanel("Volcano Plot",
-                                        sidebarLayout(
-                                            sidebarPanel(
-                                              HTML("A volcano plot can be generated with <b> log2 fold-change </b> on the x-axis and <b> p-adjusted </b> on the y-axis. <p>"),
-                                              radioButtons(inputId = "x_axis", "Choose the column for the x-axis",
-                                                           choices = c("baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"), selected = 'log2FoldChange'),
-                                              radioButtons(inputId =  "y_axis", "Choose the column for the y-axis",
-                                                           choices = c("baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"), selected = 'padj'),
-                                              colourInput("color_base", "Select Base Point Color", "#F033A4"),
-                                              colourInput("color_highlight", "Select Highlight Point Color", "#F7D513"),
-                                              tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar {background: purple}")), #color slider purple
-                                              sliderInput(inputId =  "padj_color", "Select the magnitude of the p adjusted coloring:", min = -300, max = 0, value = -100),
-                                              actionButton("run_button", "Plot", icon = icon("image"), class = "btn-block")
-                                            ),
-                                            mainPanel(
-                                              plotOutput("volcano_plot")
-                                            )
-                                        )
+                             sidebarLayout(
+                               sidebarPanel(
+                                 fileInput("Normalized_Count_File_for_DE", "Choose a file to perform DESeq2", accept = '.csv'),
+                                 radioButtons(inputId = "cell_stage", label = HTML("<strong>Choose the Cell Stage to subset</strong>"), 
+                                             choices = c("ex", "vP", "vD", "iP", "iD"), selected = 'vP')),
+                                 mainPanel(
+                                 tabsetPanel(
+                                   tabPanel("Differential Expression Results", dataTableOutput("Diff_eq_table")),
+                                   tabPanel("Volcano Plot",
+                                            sidebarLayout(
+                                                sidebarPanel(
+                                                  HTML("A volcano plot can be generated with <b> log2 fold-change </b> on the x-axis and <b> p-adjusted </b> on the y-axis. <p>"),
+                                                  radioButtons(inputId = "x_axis", "Choose the column for the x-axis",
+                                                               choices = c("baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"), selected = 'log2FoldChange'),
+                                                  radioButtons(inputId =  "y_axis", "Choose the column for the y-axis",
+                                                               choices = c("baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"), selected = 'padj'),
+                                                  colourInput("color_base", "Select Base Point Color", "grey"),
+                                                  colourInput("color_highlight", "Select Highlight Point Color", "#3C0E8C"),
+                                                  tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar {background: purple}")), #color slider purple
+                                                  sliderInput(inputId =  "padj_color", "Select the magnitude of the p adjusted coloring:", min = -30, max = 0, value = -5),
+                                                  actionButton("run_button", "Plot", icon = icon("image"), class = "btn-block")
+                                                ),
+                                                mainPanel(
+                                                  plotOutput("volcano_plot")
+                                                )
+                                        )))
                                )
                              )
                            )
@@ -104,7 +109,7 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "pulse"),
                   tabPanel("Gene Set Ennrichment Analysis",
                            sidebarLayout(
                              sidebarPanel(
-                               fileInput("FGSEA_file", "Choose a txt file", accept = '.txt')
+                               fileInput("FGSEA_file", "Choose a FGSEA txt file", accept = '.txt')
                              ),
                              mainPanel(
                                tabsetPanel(
@@ -353,7 +358,7 @@ server <- function(input, output, session) {
     #' median count vs variance (consider log scale for plot)
     median_v_var <- ggplot() + 
       geom_point(data = data, aes(x=rank(Median_Count), y= Variance, color = "Fail_Filter"), alpha = 0.5) +
-      geom_point(data = f_data, aes(x=rank(Median_Count), y= Variance, color = "Pass_Filter"), alpha = 0.5) +
+      geom_point(data = f_data, aes(x=rank(Median_Count), y= Variance, color = "Pass_Filter"), alpha = 1) +
       scale_color_manual(values = c("Fail_Filter" = "#00BFC4", "Pass_Filter" = "#7CAE00")) +
       ggtitle('Median count vs variance') +
       coord_cartesian(clip = 'off')
@@ -361,7 +366,7 @@ server <- function(input, output, session) {
     #' median count vs number of zeros
     median_v_zero <- ggplot() + 
       geom_point(data = data, aes(x=rank(Median_Count), y= Number_of_Zeros, color = "Fail_Filter"), alpha = 0.5) +
-      geom_point(data = f_data, aes(x=rank(Median_Count), y= Number_of_Zeros, color = "Pass_Filter"), alpha = 0.5) +
+      geom_point(data = f_data, aes(x=rank(Median_Count), y= Number_of_Zeros, color = "Pass_Filter"), alpha = 1) +
       scale_color_manual(values = c("Fail_Filter" = "#00BFC4", "Pass_Filter" = "#7CAE00")) +
       ggtitle('Median count vs number of zeros') +
       coord_cartesian(clip = 'off')
@@ -429,6 +434,14 @@ server <- function(input, output, session) {
   }
   
   #' Tab 3: Differential Expression
+  load_data_de <- reactive({
+    #require an input file
+    req(input$Normalized_Count_File_for_DE)
+    # read the file
+    input_file <- read_csv(file = input$Normalized_Count_File_for_DE$datapath) #results of the file upload are nested
+    
+    return(input_file)
+  })
   #' Tab with sortable table displaying differential expression results
   diff_eq <- function(filtered_data, metadata, cell_stage){
     
@@ -569,7 +582,7 @@ server <- function(input, output, session) {
     plot_continous_var(load_data(), input$subset_data)
   }, height = 1500)
   
-  # Render objects for Counts and DE tab
+  # Render objects for Counts
   # Function to process data based on file input and filtering parameters
   # Define reactive values to store filter values
 
@@ -591,26 +604,24 @@ server <- function(input, output, session) {
   output$Filtered_Summary_table <- renderTable({
     filtered_summary_table(filtered_data_react()[[1]], filtered_data_react()[[2]])
     })
-  
   output$Diagnostic_plot <- renderPlot({
     diagnostic_scatter_plots(filtered_data_react()[[1]], filtered_data_react()[[2]])
   })
-
   output$Heatmap_plot <- renderPlot({
     clustered_heatmap(filtered_data_react()[[2]])
   }, height = 400)
-
+  
   output$PCA_plot <- renderPlot({
     PCA_plot(filtered_data_react()[[2]], input$First_PC, input$Second_PC)
   })
-  # 
-  # output$Diff_eq_table <- renderDataTable({
-  #   data()$diff_eq_table
-  # })
-  # 
-  # output$volcano_plot <- renderPlot({
-  #   data()$custom_volcano_plot
-  # })
+  
+  # Render objects for Sample tab
+  output$Diff_eq_table <- renderDataTable({
+    diff_eq(load_data_de(), column_summary(load_data()), input$cell_stage)
+  })
+  output$volcano_plot <- renderPlot({
+    volcano_plot(diff_eq(load_data_de(), column_summary(load_data()), input$cell_stage), input$x_axis, input$y_axis, input$padj_color, input$color_base, input$color_highlight)
+  })
   
   # Render objects for FGSEA tab
   output$barplot_fgsea <- renderPlot({
