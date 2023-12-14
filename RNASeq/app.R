@@ -15,8 +15,8 @@ library(pheatmap)
 library(Cairo)
 library(patchwork)
 library(plotly)
-#library(future)
-#plan(multisession)
+library(heatmaply)
+library(gplots)
 
 # Increase the maximum upload size (in bytes)
 options(shiny.maxRequestSize = 30 * 1024^2)  # Set to 30 MB
@@ -28,7 +28,7 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "pulse"),
                 HTML("<h5><em>Transcriptional Reversion of Cardiac Myocyte Fate During Mammalian Cardiac Regeneration</em></h5>"),
                 HTML("Joselyn Huaman Argandona"),
                 tabsetPanel(
-                  tabPanel("Sample Counts Exploration", 
+                  tabPanel("Sample Information Exploration", 
                            sidebarLayout(
                              sidebarPanel(
                               fileInput("Count_File", "Choose a txt file", accept = '.txt')
@@ -47,7 +47,7 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "pulse"),
                             )
                            )
                   ),
-                  tabPanel("Counts",
+                  tabPanel("Counts Exploration",
                            sidebarLayout(
                              sidebarPanel(
                                fileInput("Normalized_Count_File", "Choose a txt file", accept = '.txt'),
@@ -62,7 +62,7 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "pulse"),
                               tabPanel("Diagnostic ScatterPlot", 
                                        HTML("Rank is in ascending order <br>"),
                                        plotOutput("Diagnostic_plot")),
-                              tabPanel("Heatmap", plotOutput("Heatmap_plot", height = '400px')),
+                              tabPanel("Heatmap", plotOutput("Heatmap_plot", height = "1500px")),
                               tabPanel("PCA",
                                        wellPanel(
                                          fluidRow(
@@ -79,7 +79,7 @@ ui <- fluidPage(theme = bs_theme(version = 5, bootswatch = "pulse"),
                              sidebarLayout(
                                sidebarPanel(
                                  fileInput("Normalized_Count_File_for_DE", "Choose a file to perform DESeq2", accept = '.csv'),
-                                 radioButtons(inputId = "cell_stage", label = HTML("<strong>Choose the Cell Stage to subset</strong>"), 
+                                 radioButtons(inputId = "cell_stage", label = HTML("Choose the Cell Stage to subset"), 
                                              choices = c("ex", "vP", "vD", "iP", "iD"), selected = 'vP')),
                                  mainPanel(
                                  tabsetPanel(
@@ -386,20 +386,23 @@ server <- function(input, output, session) {
     filtered_data_matrix <- as.matrix(filtered_data_numeric)
     
     # Choose a color palette from RColorBrewer
-    my_palette <- colorRampPalette(brewer.pal(9, "RdBu"))(100)
+    my_palette <- colorRampPalette(brewer.pal(9, "PRGn"))(100)
+    
+    # Log-transform the data
+    log_transformed_data <- log2(filtered_data_matrix + 1)  # Adding 1 to avoid log(0)
     
     #clustered heatmap with scale
-    hetmap <- pheatmap(filtered_data_matrix, 
-                       col = my_palette, 
-                       main = "Clustered Heatmap of Counts",
-                       height = 100, 
-                       annotation_row_text_size = 8,
-                       fontsize_row = 5,
-                       cellheight = 5, 
-                       cellwidth = 5)
+    heatmap.2(log_transformed_data, 
+             col = my_palette, 
+             main = "Clustered Heatmap of Filtered Counts",
+             key = TRUE,
+             key.title = "Log-Transformed Counts",
+             key.xlab = "Log2(count + 1)",
+             trace = "none",
+             height = 1000)
   
     
-    return(hetmap)
+   # return((hetmap))
   }
   #' Tab with a scatter plot of principal component analysis projections.
   PCA_plot <- function(data, PC_x, PC_y) {
@@ -609,7 +612,8 @@ server <- function(input, output, session) {
   })
   output$Heatmap_plot <- renderPlot({
     clustered_heatmap(filtered_data_react()[[2]])
-  }, height = 400)
+  })
+  
   
   output$PCA_plot <- renderPlot({
     PCA_plot(filtered_data_react()[[2]], input$First_PC, input$Second_PC)
